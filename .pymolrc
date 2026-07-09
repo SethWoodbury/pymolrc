@@ -1,0 +1,1129 @@
+import numpy as np
+
+# Load the local helper script if present (show_termini). Not bundled with this
+# repo, so a fresh clone that lacks it skips this block and loads fine.
+import os as _os
+_RC_SCRIPTS = "/home/woodbuse/special_scripts/pymol_rc_scripts/"
+if _os.path.exists(_RC_SCRIPTS + "show_termini.py"):
+    sys.path.append(_RC_SCRIPTS)
+    cmd.run(_RC_SCRIPTS + "show_termini.py")
+
+# Environment
+cmd.space('rgb')
+
+# Rendering and lighting
+set specular, 0
+set ray_shadow, off
+set ray_trace_mode, 1
+set ray_trace_disco_factor, 1
+set ray_trace_gain, 0.1
+set ray_trace_color, black
+set ray_texture, 0
+set antialias, 2
+set power, 0.2
+set ambient, 0.4
+set direct, 0.45
+set reflect, 1
+set reflect_power, 0
+set cartoon_sampling, 10
+
+# Structure display
+set orthoscopic, 1
+set valence, off
+set cartoon_flat_sheets, off
+set cartoon_fancy_sheets, 1
+set cartoon_fancy_helices, 1
+set cartoon_transparency, 0.0
+set cartoon_gap_cutoff, 0
+set ribbon_width, 8
+set line_width, 3
+
+# Performance (faster building/loading; no visual change)
+set async_builds, 1
+# Global stick/sphere sizing so the per-object auto-styling never calls the costly
+# per-selection `set` (that was the main load bottleneck). stick_radius 0.25 is the
+# PyMOL default; sphere_scale 0.7 is the metal-sphere size. Override per-object anytime.
+set stick_radius, 0.25
+set sphere_scale, 0.7
+
+# --- Foliage-forward protein carbon palettes (cycling per object) ---
+set_color sc01 = [165,206,154]
+set_color sc02 = [155,198,147]
+set_color sc03 = [146,191,140]
+set_color sc04 = [137,184,133]
+set_color sc05 = [128,177,126]
+set_color sc06 = [120,170,120]
+set_color sc07 = [112,163,114]
+set_color sc08 = [104,156,108]
+set_color sc09 = [97,149,102]
+set_color sc10 = [90,142,97]
+
+set_color bb01 = [120,172,115]
+set_color bb02 = [108,164,109]
+set_color bb03 = [97,155,99]
+set_color bb04 = [89,146,94]
+set_color bb05 = [81,138,89]
+set_color bb06 = [74,130,84]
+set_color bb07 = [67,122,80]
+set_color bb08 = [61,114,75]
+set_color bb09 = [55,106,71]
+set_color bb10 = [50,99,67]
+
+# --- Ligand carbon options (refined amethyst family) ---
+set_color lig_amethyst1 = [201,170,221]
+set_color lig_amethyst2 = [185,151,208]
+set_color lig_amethyst3 = [168,132,194]
+set_color lig_amethyst4 = [152,114,180]
+set_color lig_amethyst5 = [136,97,166]
+
+# --- Element colors (soft-but-distinct) ---
+set_color elemN = [67,120,209]
+set_color elemO = [214,86,98]
+set_color elemS = [212,177,89]
+set_color elemP = [188,128,78]
+set_color elemH = [237,239,234]
+set_color elemZn = [109,124,142]
+
+# --- Legacy colors (kept for manual use) ---
+set_color nitrogen = [2,118,253]
+set_color pymol_gray, [51,51,51]
+set_color pymol_black, [34,34,34]
+set_color good_yellow, [250,199,44]
+set_color good_teal, [40,176,193]
+set_color good_green, [170,195,47]
+set_color good_pink, [236,114,164]
+set_color good_peach, [249,145,120]
+set_color good_blue, [68,153,231]
+set_color good_gray, [220,220,220]
+set_color good_red, [228,74,62]
+set_color ipd_blue, [65,150,181]
+set_color ipd_purple, [180,31,133]
+
+# --- Seaborn palette ---
+set_color sblightgreen, [153,204,153]
+set_color sblightpurple, [204,153,204]
+set_color sblightorange, [255,219,153]
+set_color sblightblue, [153,153,255]
+set_color sblightred, [255,153,153]
+set_color sblightyellow, [255,255,153]
+
+# --- RFdiffusion gradient ---
+set_color RFd_darkblue, [75,95,170]
+set_color RFd_blue, [102,134,197]
+set_color RFd_lightblue, [149,150,198]
+set_color RFd_purple, [213,154,181]
+set_color RFd_pink, [255,172,183]
+set_color RFd_melon, [255,198,178]
+set_color RFd_navaho, [255,224,172]
+
+# Background
+bg_color black
+
+# --- Auto color and align ---
+python
+
+_AF3_CLASH_FILTER_ENABLED = False   # AF3 clash cleanup OFF by default (slow get_model/bond scan, niche); `clash_bond_filter on` to enable
+_AF3_LAST_REMOVED_BONDS = []
+_AF3_LIGAND_CENTER_FILTER_ENABLED = False
+_AF3_LAST_REMOVED_LIGAND_CENTER_BONDS = []
+_AF3_LIGAND_CENTER_ELEMENTS = {'P', 'V'}
+_AF3_STRUCTURE_NAV_INDEX = -1
+_AF3_NON_PTM_CARBON_RESIDUES = {
+    'ALA', 'VAL', 'LEU', 'ILE', 'MET', 'PRO', 'PHE', 'TRP', 'TYR'
+}
+_AF3_AA_RESIDUES = {
+    'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
+    'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL',
+    'MSE', 'SEC', 'PYL'
+}
+_AF3_BACKBONE_ATOM_NAMES = {
+    'N', 'CA', 'C', 'O', 'OXT', 'H', 'H1', 'H2', 'H3', 'HA', 'HA2', 'HA3'
+}
+
+
+def _atom_sel(atom):
+    return 'model %s and index %d' % (atom.model, atom.index)
+
+
+def _is_protein_sidechain_atom(atom):
+    if atom.hetatm:
+        return False
+    if atom.resn not in _AF3_AA_RESIDUES:
+        return False
+    if atom.name in _AF3_BACKBONE_ATOM_NAMES:
+        return False
+    return True
+
+
+def remove_clash_bonds(selection="all", _self=cmd):
+    """Remove likely non-physical inter-residue sidechain bonds in proteins.
+    Stores removed bonds so they can be restored."""
+    global _AF3_LAST_REMOVED_BONDS
+    removed = []
+    objects = _self.get_object_list(selection)
+    for obj in objects:
+        model = _self.get_model('(%s) and (%s)' % (obj, selection))
+        atoms = model.atom
+        for bond in model.bond:
+            a1 = atoms[bond.index[0]]
+            a2 = atoms[bond.index[1]]
+            if (a1.segi, a1.chain, a1.resi_number, a1.resn) == (
+                a2.segi, a2.chain, a2.resi_number, a2.resn
+            ):
+                continue
+            same_chain = (a1.segi, a1.chain) == (a2.segi, a2.chain)
+            if not same_chain:
+                continue
+            sidechain_pair = _is_protein_sidechain_atom(a1) and _is_protein_sidechain_atom(a2)
+            if not sidechain_pair:
+                continue
+
+            hydrophobic_cc = (
+                a1.symbol == 'C' and a2.symbol == 'C' and
+                a1.resn in _AF3_NON_PTM_CARBON_RESIDUES and
+                a2.resn in _AF3_NON_PTM_CARBON_RESIDUES
+            )
+            c_nos_sidechain = (
+                (a1.symbol == 'C' and a2.symbol in ('N', 'O', 'S')) or
+                (a2.symbol == 'C' and a1.symbol in ('N', 'O', 'S'))
+            )
+            if not (hydrophobic_cc or c_nos_sidechain):
+                continue
+            sel1 = _atom_sel(a1)
+            sel2 = _atom_sel(a2)
+            _self.unbond(sel1, sel2)
+            removed.append((a1.model, a1.index, a2.index, int(getattr(bond, 'order', 1))))
+    if removed:
+        _AF3_LAST_REMOVED_BONDS = removed
+        print('remove_clash_bonds: removed %d suspected inter-residue sidechain bonds.' % len(removed))
+    return len(removed)
+
+
+def remove_ligand_center_pseudobonds(selection="all", center_elements="P,V",
+                                     min_coordination=5, _self=cmd):
+    # Remove neighbor-neighbor pseudo-bonds around selected ligand center atoms.
+    global _AF3_LAST_REMOVED_LIGAND_CENTER_BONDS
+    removed = []
+    try:
+        min_coord = int(min_coordination)
+    except:
+        min_coord = 5
+    center_syms = set()
+    for token in str(center_elements).replace(';', ',').split(','):
+        sym = token.strip().upper()
+        if sym:
+            center_syms.add(sym)
+    if not center_syms:
+        center_syms = set(_AF3_LIGAND_CENTER_ELEMENTS)
+
+    objects = _self.get_object_list(selection)
+    for obj in objects:
+        model = _self.get_model('(%s) and (%s) and hetatm' % (obj, selection))
+        atoms = model.atom
+        if not atoms:
+            continue
+
+        adjacency = {}
+        bond_order = {}
+        for bond in model.bond:
+            i, j = bond.index
+            adjacency.setdefault(i, set()).add(j)
+            adjacency.setdefault(j, set()).add(i)
+            key = (i, j) if i < j else (j, i)
+            bond_order[key] = int(getattr(bond, 'order', 1))
+
+        for center_i, center in enumerate(atoms):
+            if not center.hetatm:
+                continue
+            if center.symbol.upper() not in center_syms:
+                continue
+            center_res = (center.segi, center.chain, center.resi_number, center.resn)
+            neighbors = []
+            for nb_i in adjacency.get(center_i, ()):
+                nb = atoms[nb_i]
+                if not nb.hetatm:
+                    continue
+                if (nb.segi, nb.chain, nb.resi_number, nb.resn) != center_res:
+                    continue
+                neighbors.append(nb_i)
+            if len(neighbors) < min_coord:
+                continue
+
+            for i in range(len(neighbors)):
+                for j in range(i + 1, len(neighbors)):
+                    a_i = neighbors[i]
+                    b_i = neighbors[j]
+                    if b_i not in adjacency.get(a_i, set()):
+                        continue
+                    a = atoms[a_i]
+                    b = atoms[b_i]
+                    sel1 = _atom_sel(a)
+                    sel2 = _atom_sel(b)
+                    _self.unbond(sel1, sel2)
+                    key = (a_i, b_i) if a_i < b_i else (b_i, a_i)
+                    removed.append((a.model, a.index, b.index, bond_order.get(key, 1)))
+                    adjacency[a_i].discard(b_i)
+                    adjacency[b_i].discard(a_i)
+    if removed:
+        _AF3_LAST_REMOVED_LIGAND_CENTER_BONDS = removed
+        print('remove_ligand_center_pseudobonds: removed %d ligand center-neighbor pseudo-bonds.' % len(removed))
+    return len(removed)
+
+
+def restore_clash_bonds(_self=cmd):
+    """Restore the last set of bonds removed by remove_clash_bonds."""
+    restored = 0
+    for model, idx1, idx2, order in _AF3_LAST_REMOVED_BONDS:
+        sel1 = 'model %s and index %d' % (model, idx1)
+        sel2 = 'model %s and index %d' % (model, idx2)
+        if _self.count_atoms(sel1) and _self.count_atoms(sel2):
+            _self.bond(sel1, sel2)
+            restored += 1
+            if order != 1:
+                try:
+                    _self.set_bond('valence', order, sel1, sel2)
+                except:
+                    pass
+    print('restore_clash_bonds: restored %d bonds.' % restored)
+    return restored
+
+
+def restore_ligand_center_bonds(_self=cmd):
+    # Restore bonds removed by remove_ligand_center_pseudobonds.
+    restored = 0
+    for model, idx1, idx2, order in _AF3_LAST_REMOVED_LIGAND_CENTER_BONDS:
+        sel1 = 'model %s and index %d' % (model, idx1)
+        sel2 = 'model %s and index %d' % (model, idx2)
+        if _self.count_atoms(sel1) and _self.count_atoms(sel2):
+            _self.bond(sel1, sel2)
+            restored += 1
+            if order != 1:
+                try:
+                    _self.set_bond('valence', order, sel1, sel2)
+                except:
+                    pass
+    print('restore_ligand_center_bonds: restored %d bonds.' % restored)
+    return restored
+
+
+def clash_bond_filter(mode="status", _self=cmd):
+    # Enable or disable automatic clash-bond cleanup in color_palette.
+    global _AF3_CLASH_FILTER_ENABLED
+    token = str(mode).strip().lower()
+    if token in ('on', '1', 'true', 'enable', 'enabled'):
+        _AF3_CLASH_FILTER_ENABLED = True
+    elif token in ('off', '0', 'false', 'disable', 'disabled'):
+        _AF3_CLASH_FILTER_ENABLED = False
+    elif token == 'toggle':
+        _AF3_CLASH_FILTER_ENABLED = not _AF3_CLASH_FILTER_ENABLED
+    elif token not in ('status', ''):
+        print('clash_bond_filter: use on/off/toggle/status')
+    state = 'on' if _AF3_CLASH_FILTER_ENABLED else 'off'
+    print('clash_bond_filter: %s' % state)
+    return int(_AF3_CLASH_FILTER_ENABLED)
+
+
+def ligand_center_filter(mode="status", _self=cmd):
+    # Enable or disable ligand center-neighbor pseudo-bond cleanup.
+    global _AF3_LIGAND_CENTER_FILTER_ENABLED
+    token = str(mode).strip().lower()
+    if token in ('on', '1', 'true', 'enable', 'enabled'):
+        _AF3_LIGAND_CENTER_FILTER_ENABLED = True
+    elif token in ('off', '0', 'false', 'disable', 'disabled'):
+        _AF3_LIGAND_CENTER_FILTER_ENABLED = False
+    elif token == 'toggle':
+        _AF3_LIGAND_CENTER_FILTER_ENABLED = not _AF3_LIGAND_CENTER_FILTER_ENABLED
+    elif token not in ('status', ''):
+        print('ligand_center_filter: use on/off/toggle/status')
+    state = 'on' if _AF3_LIGAND_CENTER_FILTER_ENABLED else 'off'
+    print('ligand_center_filter: %s' % state)
+    return int(_AF3_LIGAND_CENTER_FILTER_ENABLED)
+
+
+def structure_step(step=1, selection="all", _self=cmd):
+    # Cycle through loaded objects and show one structure at a time.
+    global _AF3_STRUCTURE_NAV_INDEX
+    objects = _self.get_object_list(selection)
+    if not objects:
+        print('structure_step: no objects loaded.')
+        return
+    enabled = set(_self.get_names('public_objects', enabled_only=1))
+    if _AF3_STRUCTURE_NAV_INDEX < 0 or _AF3_STRUCTURE_NAV_INDEX >= len(objects):
+        _AF3_STRUCTURE_NAV_INDEX = 0
+        for i, obj in enumerate(objects):
+            if obj in enabled:
+                _AF3_STRUCTURE_NAV_INDEX = i
+                break
+    _AF3_STRUCTURE_NAV_INDEX = (_AF3_STRUCTURE_NAV_INDEX + int(step)) % len(objects)
+    target = objects[_AF3_STRUCTURE_NAV_INDEX]
+    if _AUTOSTYLE and target not in _STYLED:
+        _style_one(target, _self=_self)   # lazy styling: style on first view (fast browsing)
+    _self.disable('all')
+    _self.enable(target)
+    # camera intentionally preserved (no orient/center) so pgup/pgdn don't reset the view
+    print('structure_step: %s (%d/%d)' % (target, _AF3_STRUCTURE_NAV_INDEX + 1, len(objects)))
+    return target
+
+
+def structure_next(selection="all", _self=cmd):
+    return structure_step(1, selection, _self=_self)
+
+
+def structure_prev(selection="all", _self=cmd):
+    return structure_step(-1, selection, _self=_self)
+
+
+def structure_show_all(selection="all", _self=cmd):
+    if _AUTOSTYLE:
+        for obj in _self.get_object_list(selection):
+            if obj not in _STYLED:
+                _style_one(obj, _self=_self)
+    _self.enable(selection)
+    print('structure_show_all: enabled all objects.')
+    return _self.count_atoms(selection)
+
+
+def bind_structure_navigation_keys(_self=cmd):
+    # PgUp/PgDn (and up/down) browse structures: walk a lazy-load list if active,
+    # else cycle already-loaded objects. Camera preserved (no orient).
+    _self.set_key('pgup', 'browse_prev')
+    _self.set_key('pgdn', 'browse_next')
+    _self.set_key('up', 'browse_prev')
+    _self.set_key('down', 'browse_next')
+    return 1
+
+
+# ---------------------------------------------------------------------------
+#  Metals, REMARK 666 catalytic residues, sequence, bg toggle (added 2026-06-12)
+# ---------------------------------------------------------------------------
+import os
+import gzip
+import threading
+
+# Distinct highlight color for catalytic (REMARK 666) residue carbons.
+# Change anytime, e.g.:  set_color catres_hi = [250,199,44]   (or: color yellow, catres)
+cmd.set_color('catres_hi', [255, 150, 40])
+
+# Metal detection by ELEMENT and/or RESIDUE NAME and/or ATOM NAME.
+# The atom-name clause is guarded with "not polymer.protein" because atom name
+# "CA" is the protein alpha-carbon, NOT calcium (so naive name matching would
+# sphere every residue). Element/resn matching is unambiguous.
+_METAL_ELEMS = ('Zn+Fe+Mg+Mn+Cu+Co+Ni+Ca+Na+K+Mo+V+W+Cd+Hg+Pt+Pd+Au+Ag+Al+'
+                'Ba+Sr+Li+Cs+Rb+Cr')
+_METAL_RESNS = ('ZN+FE+FE2+MG+MN+MN3+CU+CU1+CO+3CO+NI+CA+NA+K+MO+CD+HG+PT+PD+'
+                'AU+AG+AL+BA+SR+LI+CS+RB+CR+V+W')
+_METAL_NAMES = ('ZN+FE+MG+MN+CU+CO+NI+NA+K+MO+CD+HG+PT+PD+AU+AG+AL+BA+SR+LI+'
+                'CS+RB+CR')
+# Organic elements. An atom whose NAME collides with a metal symbol -- "CD"
+# (Lys/Arg/Pro/Glu/Gln or carboxy-Lys KCX delta-carbon), "CO" (carbonyl C),
+# "NI", "SR", ... -- but whose ELEMENT is one of these is NOT a metal. It is a
+# side-chain/backbone atom of a non-standard residue (KCX, MSE, ligands) that
+# PyMOL flags `not polymer`, so the `not polymer` gate below does not protect it
+# the way it protects the alpha-carbon "CA". Excluding organic-element atoms from
+# the name-based clause keeps e.g. the KCX CD carbon from being drawn as a grey
+# metal sphere, while genuine ions (correct metal element) still match.
+_METAL_ORGANIC = 'C+N+O+H+S+P+Se+B+F+Cl+Br+I'
+# Gate on `not polymer` FIRST (a fast per-atom flag): metals/ions are never part of a
+# protein/nucleic polymer chain. This shrinks the expensive elem/resn/name token match
+# from every atom to just the handful of hetero atoms (~60x faster styling on load),
+# and it makes the alpha-carbon "CA" safe automatically (CA is always polymer).
+_METAL_SEL = ('(not polymer) and ((elem %s) or (resn %s) or '
+              '((name %s) and not elem %s))'
+              % (_METAL_ELEMS, _METAL_RESNS, _METAL_NAMES, _METAL_ORGANIC))
+
+_CATRES_BY_OBJ = {}
+_STYLED = set()
+_AUTOSTYLE = True
+_AUTOALIGN = False
+_AUTOSOLO = False
+
+_AA3TO1 = {
+    'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C', 'GLN': 'Q',
+    'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I', 'LEU': 'L', 'LYS': 'K',
+    'MET': 'M', 'PHE': 'F', 'PRO': 'P', 'SER': 'S', 'THR': 'T', 'TRP': 'W',
+    'TYR': 'Y', 'VAL': 'V', 'MSE': 'M', 'SEC': 'U', 'PYL': 'O', 'HID': 'H',
+    'HIE': 'H', 'HIP': 'H', 'HSD': 'H', 'HSE': 'H', 'HSP': 'H', 'CYX': 'C',
+    'CYM': 'C', 'LYN': 'K', 'ASH': 'D', 'GLH': 'E',
+}
+
+
+def show_metals(selection="all", _self=cmd):
+    """Show every metal (by element / residue name / atom name) as a sphere.
+    Sphere size comes from the global `sphere_scale` (0.7) — no per-selection `set`
+    here, which keeps this O(1)-ish and cheap during big multi-file loads."""
+    sel = '(%s) and %s' % (selection, _METAL_SEL)
+    _self.show('spheres', sel)
+    _self.color('elemZn', sel)
+
+
+_REMARK666_CACHE = {}   # path -> ((mtime, size), [(chain, resi), ...]); skips re-reading on reload
+
+
+def _parse_remark666(path):
+    """[(chain, resi), ...] of catalytic MATCH MOTIF residues from a PDB.
+    REMARK 666 MATCH TEMPLATE <c> <n3> <r> MATCH MOTIF <chain> <n3> <resi> ...
+    -> chain = field[9], resi = field[11]. Cheap: stops at first coordinate line.
+    Cached by (mtime, size) so re-loading the same files (random_shuffle re-runs) is a stat,
+    not a re-read of every header (matters on NFS)."""
+    res = []
+    if not path or not isinstance(path, str) or not os.path.isfile(path):
+        return res
+    key = None
+    try:
+        st = os.stat(path)
+        key = (st.st_mtime, st.st_size)
+        hit = _REMARK666_CACHE.get(path)
+        if hit is not None and hit[0] == key:
+            return hit[1]
+    except OSError:
+        return res
+    try:
+        opener = gzip.open if path.endswith('.gz') else open
+        with opener(path, 'rt', errors='ignore') as fh:
+            for line in fh:
+                if line.startswith('ATOM') or line.startswith('HETATM'):
+                    break
+                if not line.startswith('REMARK 666 MATCH'):
+                    continue
+                sp = line.split()
+                if len(sp) >= 12:
+                    res.append((sp[9], sp[11]))
+    except Exception:
+        pass
+    if key is not None:
+        _REMARK666_CACHE[path] = (key, res)
+    return res
+
+
+def _catres_obj_sel(obj, cats):
+    parts = ['(%s and chain %s and resi %s)' % (obj, ch, ri) for ch, ri in cats]
+    return ' or '.join(parts) if parts else 'none'
+
+
+def _catres_iter(_self=cmd):
+    """Yield (obj, per-object catalytic selection) for live objects; prune dead ones.
+    No persistent aggregate `catres` selection is built — one giant OR'd selection
+    across many objects did not scale to big multi-file/glob loads. Per-object is
+    robust and is all the styling needs."""
+    live = set(_self.get_object_list())
+    for obj in list(_CATRES_BY_OBJ.keys()):
+        if obj not in live:
+            _CATRES_BY_OBJ.pop(obj, None)
+            continue
+        yield obj, _catres_obj_sel(obj, _CATRES_BY_OBJ[obj])
+
+
+def _color_catres(obj, _self=cmd):
+    cats = _CATRES_BY_OBJ.get(obj)
+    if not cats:
+        return
+    sel = _catres_obj_sel(obj, cats)
+    # Highlight only SIDECHAIN carbons (backbone keeps the protein color), EXCEPT
+    # PRO/GLY whose backbone carbons ARE highlighted. One merged color op; stick
+    # radius comes from the global stick_radius (no per-selection `set`).
+    _self.color('catres_hi',
+                '((%s) and sidechain and elem C) or ((%s) and resn PRO+GLY and elem C)' % (sel, sel))
+    _self.show('sticks', '(%s) and (sidechain or name CA) and not hydro and not resn GLY' % sel)
+
+
+_SC_PAL = ['sc10', 'sc09', 'sc08', 'sc07', 'sc06', 'sc05', 'sc04', 'sc03', 'sc02', 'sc01']
+_BB_PAL = ['bb10', 'bb09', 'bb08', 'bb07', 'bb06', 'bb05', 'bb04', 'bb03', 'bb02', 'bb01']
+_OBJ_CYC = {}
+_NEXT_CYC = [0]
+
+
+def _cycle_index(obj):
+    if obj not in _OBJ_CYC:
+        _OBJ_CYC[obj] = _NEXT_CYC[0]
+        _NEXT_CYC[0] += 1
+    return _OBJ_CYC[obj]
+
+
+def _color_foliage(obj, _self=cmd):
+    """Per-object foliage coloring (single mid-palette green) + amethyst ligand + element
+    colors + ligand sticks. Matches color_palette's LOOK without its heavy passes. Uses
+    ONE green (not cycling) — you browse one structure at a time, so cycling is invisible
+    here; color_palette keeps cycling for multi-object overlays."""
+    _self.color('sc05', obj)
+    _self.color('bb05', '%s and polymer.protein and elem C and backbone' % obj)
+    _self.color('sc05', '%s and polymer.protein and elem C and not backbone' % obj)
+    _self.unset('cartoon_color', obj)
+    _self.color('elemN', '%s and elem N' % obj)
+    _self.color('elemO', '%s and elem O' % obj)
+    _self.color('elemS', '%s and elem S' % obj)
+    _self.color('elemP', '%s and elem P' % obj)
+    _self.color('elemH', '%s and elem H' % obj)
+    _self.color('lig_amethyst3', '%s and organic and elem C' % obj)
+    _self.show('sticks', '%s and organic and not (%s) and not hydro' % (obj, _METAL_SEL))
+
+
+def _style_one(obj, _self=cmd):
+    """Full cheap per-object look: foliage colors + ligand sticks + metal spheres +
+    catalytic sticks. Records the object as styled. (Alignment / clash-removal /
+    ligand-shell remain the explicit `color_palette` / `align_all`.)"""
+    _color_foliage(obj, _self=_self)
+    show_metals(obj, _self=_self)
+    _color_catres(obj, _self=_self)
+    _STYLED.add(obj)
+
+
+def show_catres(selection="all", _self=cmd):
+    """Show all known REMARK 666 catalytic residues as highlighted sticks (per object)."""
+    n = 0
+    for obj, sel in _catres_iter(_self=_self):
+        _color_catres(obj, _self=_self)
+        n += _self.count_atoms('(%s) and name CA' % sel)
+    print('show_catres: %d catalytic residue(s).' % n)
+
+
+def only_catres(_self=cmd):
+    """Hide all protein sidechain sticks EXCEPT the catalytic (REMARK 666) ones.
+    Operates per object (no aggregate selection), so it scales to big loads."""
+    _self.hide('sticks', 'polymer.protein')
+    n = 0
+    for obj, sel in _catres_iter(_self=_self):
+        stick = '(%s) and (sidechain or name CA) and not hydro and not resn GLY' % sel
+        if _self.count_atoms(stick):
+            _self.show('sticks', stick)
+            _self.set('stick_radius', 0.25, stick)
+        _self.color('catres_hi', '(%s) and sidechain and elem C' % sel)
+        _self.color('catres_hi', '(%s) and resn PRO+GLY and elem C' % sel)
+        n += _self.count_atoms('(%s) and name CA' % sel)
+    if n:
+        print('only_catres: showing %d catalytic residue(s) as sticks.' % n)
+    else:
+        print('only_catres: no catalytic (REMARK 666) residues found.')
+
+
+def seq(selection="sele", _self=cmd):
+    """Print the continuous single-line one-letter sequence of a selection
+    (whole residues). Default selection is the mouse selection `sele`.
+    USAGE: seq           |  seq chain A  |  seq myobj and resi 100-160"""
+    sel = selection
+    try:
+        if _self.count_atoms('(%s)' % sel) == 0:
+            print('seq: selection "%s" is empty (nothing picked?).' % sel)
+            return ''
+    except Exception:
+        print('seq: bad selection "%s".' % sel)
+        return ''
+    collected = []
+    _self.iterate('byres (%s) and name CA and polymer.protein' % sel,
+                  'collected.append((model, segi, chain, resv, resn))',
+                  space={'collected': collected})
+    if not collected:
+        print('seq: no protein residues (CA atoms) in "%s".' % sel)
+        return ''
+    seen = set(); ordered = []
+    for rec in collected:
+        k = rec[:4]
+        if k in seen:
+            continue
+        seen.add(k); ordered.append(rec)
+    s = ''.join(_AA3TO1.get(r[4], 'X') for r in ordered)
+    print(s)
+    print('seq: %d residues' % len(s))
+    return s
+
+
+def bg_white(_self=cmd):
+    """White background (keeps your render aesthetic; black ray-trace outline)."""
+    _self.bg_color('white')
+    _self.set('ray_trace_color', 'black')
+    print('bg: white')
+
+
+def bg_black(_self=cmd):
+    """Black background (the default)."""
+    _self.bg_color('black')
+    _self.set('ray_trace_color', 'black')
+    print('bg: black')
+
+
+def autostyle(mode="status", _self=cmd):
+    """Toggle auto display of metals (spheres) + catalytic residues (sticks) on load.
+    USAGE: autostyle on|off|toggle|status"""
+    global _AUTOSTYLE
+    t = str(mode).strip().lower()
+    if t in ('on', '1', 'true', 'enable'):
+        _AUTOSTYLE = True
+    elif t in ('off', '0', 'false', 'disable'):
+        _AUTOSTYLE = False
+    elif t == 'toggle':
+        _AUTOSTYLE = not _AUTOSTYLE
+    elif t not in ('status', ''):
+        print('autostyle: use on|off|toggle|status')
+    print('autostyle: %s' % ('on' if _AUTOSTYLE else 'off'))
+    return int(_AUTOSTYLE)
+
+
+def align_all(reference="", cycles=2, _self=cmd):
+    """Structurally superpose ALL objects onto a reference (default: first loaded),
+    so diverse structures share the same space. Sequence-independent `super` with a
+    `cealign` fallback for very divergent pairs. Each object is aligned once to the
+    reference (O(N)). Run once after loading a batch/glob.
+    USAGE: align_all [reference [, cycles]]"""
+    objs = _self.get_object_list()
+    if len(objs) < 2:
+        print('align_all: need >= 2 objects.')
+        return
+    ref = reference if (reference and reference in objs) else objs[0]
+    try:
+        cyc = int(cycles)
+    except Exception:
+        cyc = 2
+    aligned, failed = 0, []
+    for obj in objs:
+        if obj == ref:
+            continue
+        ok = False
+        try:
+            r = _self.super(obj, ref, cycles=cyc)
+            ok = bool(r) and r[1] > 0
+        except Exception:
+            ok = False
+        if not ok:
+            try:
+                _self.cealign(ref, obj)
+                ok = True
+            except Exception:
+                ok = False
+        if ok:
+            aligned += 1
+        else:
+            failed.append(obj)
+    _self.zoom(ref, buffer=8)
+    msg = 'align_all: superposed %d/%d onto %s' % (aligned, len(objs) - 1, ref)
+    if failed:
+        msg += '  (failed: %s%s)' % (', '.join(failed[:4]), '...' if len(failed) > 4 else '')
+    print(msg)
+
+
+def center_all(reference="", _self=cmd):
+    """Instantly co-locate every object's center onto a reference's center
+    (translation only, NO rotation). Much faster than align_all; good when you just
+    want diverse structures roughly in the same spot. USAGE: center_all [reference]"""
+    objs = _self.get_object_list()
+    if len(objs) < 2:
+        print('center_all: need >= 2 objects.')
+        return
+    ref = reference if (reference and reference in objs) else objs[0]
+    try:
+        cx, cy, cz = _self.centerofmass(ref)
+    except Exception:
+        print('center_all: could not compute reference center.')
+        return
+    n = 0
+    for obj in objs:
+        if obj == ref:
+            continue
+        try:
+            ox, oy, oz = _self.centerofmass(obj)
+            _self.translate([cx - ox, cy - oy, cz - oz], obj, camera=0)
+            n += 1
+        except Exception:
+            pass
+    _self.zoom(ref, buffer=8)
+    print('center_all: co-centered %d object(s) on %s' % (n, ref))
+
+
+def autoalign(mode="status", _self=cmd):
+    """Toggle auto-superposition of each newly loaded object onto the first one,
+    as it loads (hands-free 'same space' for globs; adds a little load time).
+    USAGE: autoalign on|off|toggle"""
+    global _AUTOALIGN
+    t = str(mode).strip().lower()
+    if t in ('on', '1', 'true', 'enable'):
+        _AUTOALIGN = True
+    elif t in ('off', '0', 'false', 'disable'):
+        _AUTOALIGN = False
+    elif t == 'toggle':
+        _AUTOALIGN = not _AUTOALIGN
+    elif t not in ('status', ''):
+        print('autoalign: use on|off|toggle|status')
+    print('autoalign: %s' % ('on' if _AUTOALIGN else 'off'))
+    return int(_AUTOALIGN)
+
+
+def autosolo(mode="status", _self=cmd):
+    """Toggle 'solo load': newly loaded objects beyond the first load HIDDEN, so a big
+    glob loads/renders fast; browse with pgup/pgdn (or `structure_show_all`).
+    USAGE: autosolo on|off|toggle"""
+    global _AUTOSOLO
+    t = str(mode).strip().lower()
+    if t in ('on', '1', 'true', 'enable'):
+        _AUTOSOLO = True
+    elif t in ('off', '0', 'false', 'disable'):
+        _AUTOSOLO = False
+    elif t == 'toggle':
+        _AUTOSOLO = not _AUTOSOLO
+    elif t not in ('status', ''):
+        print('autosolo: use on|off|toggle|status')
+    print('autosolo: %s' % ('on' if _AUTOSOLO else 'off'))
+    return int(_AUTOSOLO)
+
+
+def _style_catres_batched(objs, _self=cmd, chunk=40):
+    """Style catalytic residues for many objects in O(N/chunk) ops (not per-object): build a
+    TRANSIENT combined selection per chunk (object-scoped clauses; residues grouped per chain
+    so each clause is short), show+color, then delete it. Transient + object-scoped avoids
+    the stale-aggregate-selection ('only the first') and cross-object-chain bugs."""
+    items = [(o, _CATRES_BY_OBJ[o]) for o in objs if _CATRES_BY_OBJ.get(o)]
+    if not items:
+        return
+    for i in range(0, len(items), chunk):
+        parts = []
+        for o, cats in items[i:i + chunk]:
+            bychain = {}
+            for ch, ri in cats:
+                bychain.setdefault(ch, []).append(str(ri))
+            for ch, ris in bychain.items():
+                parts.append('(%s and chain %s and resi %s)' % (o, ch, '+'.join(ris)))
+        if not parts:
+            continue
+        _self.select('_cat_tmp', ' or '.join(parts))
+        _self.show('sticks', '_cat_tmp and (sidechain or name CA) and not hydro and not resn GLY')
+        _self.color('catres_hi', '(_cat_tmp and sidechain and elem C) or (_cat_tmp and resn PRO+GLY and elem C)')
+    _self.delete('_cat_tmp')
+    _self.deselect()
+
+
+def style_all(selection="all", _self=cmd):
+    """Style ALL loaded objects at once, fully BATCHED (O(N), not O(N^2)): ONE global op per
+    color/representation + a chunked transient catalytic selection, all under suspend_updates.
+    Single foliage green here (you browse one at a time; color_palette keeps cycling greens
+    for multi-object overlays). USAGE: style_all [sel]"""
+    objs = _self.get_object_list() if selection in ('all', '(all)', '*') else _self.get_object_list(selection)
+    if not objs:
+        print('style_all: no objects.')
+        return
+    s = selection
+    _self.set('suspend_updates', 1)
+    try:
+        _self.color('sc05', '(%s) and polymer.protein' % s)                        # foliage base
+        _self.color('bb05', '(%s) and polymer.protein and elem C and backbone' % s)
+        _self.color('sc05', '(%s) and polymer.protein and elem C and not backbone' % s)
+        _self.unset('cartoon_color')                                               # cartoon follows CA color (unpinned)
+        _self.color('elemN', '(%s) and elem N' % s)                                # elements + ligand
+        _self.color('elemO', '(%s) and elem O' % s)
+        _self.color('elemS', '(%s) and elem S' % s)
+        _self.color('elemP', '(%s) and elem P' % s)
+        _self.color('elemH', '(%s) and elem H' % s)
+        _self.color('lig_amethyst3', '(%s) and organic and elem C' % s)
+        _self.show('cartoon', '(%s) and polymer' % s)                              # representations
+        _self.show('sticks', '(%s) and organic and not (%s) and not hydro' % (s, _METAL_SEL))
+        _self.show('spheres', '(%s) and (%s)' % (s, _METAL_SEL))
+        _self.color('elemZn', '(%s) and (%s)' % (s, _METAL_SEL))
+        _self.hide('everything', '(%s) and hydro' % s)
+        _style_catres_batched(objs, _self=_self)                                   # catalytic (chunked, transient)
+        _STYLED.update(objs)
+    finally:
+        _self.set('suspend_updates', 0)
+    print('style_all: styled %d object(s).' % len(objs))
+
+
+# --- Background browse-load: show the FIRST structure immediately, then load the rest
+#     on a daemon thread so they ALL appear in the object list + get styled WITHOUT
+#     blocking you. Only the first is shown (clean view); pgup/pgdn cycles the loaded
+#     objects (instant — already in memory). PyMOL's cmd API is thread-safe (lock). ---
+_BROWSE_THREAD = [None]
+
+
+_BROWSE_PRESTYLE = [True]    # default ON: browse_list pre-styles ALL up front (one-time load pause, then instant scroll); `browse_prestyle off` for instant start + tiny per-view hitch
+
+
+def browse_list(listfile, _self=cmd):
+    """Load ALL structures in a list (so they all appear in the object list) and show ONLY
+    the first. By default the rest load fast but stay hidden + unstyled until you pgup/pgdn
+    to them (styled on first view ~0.2 s). Run `style_all` once (or `browse_prestyle on`)
+    to pre-style everything up front for instant scrolling (one-time pause at load).
+    USAGE: browse_list <listfile>"""
+    global _AUTOSOLO
+    try:
+        with open(listfile) as fh:
+            files = [l.strip() for l in fh if l.strip()]
+    except Exception as e:
+        print('browse_list: cannot read %s: %s' % (listfile, e))
+        return
+    if not files:
+        print('browse_list: empty list.')
+        return
+    solo_prev = _AUTOSOLO
+    _AUTOSOLO = True             # first -> styled+shown; the rest -> loaded but hidden + styling deferred
+    try:
+        for f in files:
+            try:
+                _self.load(f)
+            except Exception:
+                pass
+    finally:
+        _AUTOSOLO = solo_prev
+    objs = _self.get_object_list()
+    first = objs[0] if objs else None
+    if _BROWSE_PRESTYLE[0]:
+        style_all('all', _self=_self)          # pre-style every object now (one-time pause)
+    if first:
+        _self.disable('all')
+        _self.enable(first)                    # ONLY the first is shown; the rest sit in the sidebar
+        _self.zoom(first, buffer=5)
+    extra = '  (pre-styled all)' if _BROWSE_PRESTYLE[0] else ''
+    print('browse_list: loaded %d structures (all in object list); showing the 1st%s. '
+          'pgup/pgdn to cycle.' % (len(files), extra))
+    return first
+
+
+def browse_prestyle(mode="status", _self=cmd):
+    """Toggle whether browse_list/random_shuffle pre-styles ALL structures up front
+    (smooth scrolling, one-time load pause) vs. styling each on first view (instant start,
+    tiny per-view pause). USAGE: browse_prestyle on|off|toggle"""
+    t = str(mode).strip().lower()
+    if t in ('on', '1', 'true', 'enable'):
+        _BROWSE_PRESTYLE[0] = True
+    elif t in ('off', '0', 'false', 'disable'):
+        _BROWSE_PRESTYLE[0] = False
+    elif t == 'toggle':
+        _BROWSE_PRESTYLE[0] = not _BROWSE_PRESTYLE[0]
+    elif t not in ('status', ''):
+        print('browse_prestyle: use on|off|toggle|status')
+    print('browse_prestyle: %s' % ('on' if _BROWSE_PRESTYLE[0] else 'off'))
+    return int(_BROWSE_PRESTYLE[0])
+
+
+def browse_step(step=1, _self=cmd):
+    return structure_step(step, _self=_self)
+
+
+def browse_next(_self=cmd):
+    return structure_step(1, _self=_self)
+
+
+def browse_prev(_self=cmd):
+    return structure_step(-1, _self=_self)
+
+
+# --- Lean load/fetch hooks: per-object metals + catres only; NO global recenter
+#     (this replaces the old center('all')-on-every-load that caused the lag). ---
+_pymolrc_orig_load = cmd.load
+_pymolrc_orig_fetch = cmd.fetch
+
+
+def _pymolrc_autostyle_new(filename, new_objs, ref=None, _self=cmd):
+    cats = _parse_remark666(filename)
+    if ref is None:
+        all_objs = _self.get_object_list()
+        ref = all_objs[0] if all_objs else None
+    for obj in new_objs:
+        _STYLED.discard(obj)                  # fresh load: clear any stale styled/catres state
+        _CATRES_BY_OBJ.pop(obj, None)         # (handles delete + reload of the same name)
+        _OBJ_CYC.pop(obj, None)
+        if cats:                              # record catalytic residues (cheap)
+            _CATRES_BY_OBJ[obj] = list(cats)
+        if _AUTOALIGN and ref and obj != ref:
+            try:
+                _self.super(obj, ref, cycles=1)
+            except Exception:
+                pass
+        if not _AUTOSTYLE:
+            continue
+        if _AUTOSOLO and ref and obj != ref:
+            _self.disable(obj)                # hidden; styled lazily on first view (pgup/pgdn)
+        else:
+            _style_one(obj, _self=_self)      # style now (default: every object on load)
+
+
+# Persistent set of known objects: lets the hooks find newly-loaded objects with ONE
+# get_object_list() per load (not 3) -> drops the load-phase O(N^2). Reconciled to the
+# live list each load, so delete+reload of the same name still works.
+_KNOWN_OBJS = set()
+
+
+def _pymolrc_load_hook(*args, **kwargs):
+    result = _pymolrc_orig_load(*args, **kwargs)
+    try:
+        cur = cmd.get_object_list()                       # ONE scan
+        new = [o for o in cur if o not in _KNOWN_OBJS]
+        if new:
+            fn = args[0] if args else kwargs.get('filename')
+            _pymolrc_autostyle_new(fn, new, cur[0] if cur else None)   # ref passed (no re-fetch)
+            _KNOWN_OBJS.update(new)                        # add-only (O(new)); delete hook prunes
+    except Exception as e:
+        print('[pymolrc] autostyle (load) skipped: %s' % e)
+    return result
+
+
+def _pymolrc_fetch_hook(*args, **kwargs):
+    result = _pymolrc_orig_fetch(*args, **kwargs)
+    try:
+        cur = cmd.get_object_list()
+        new = [o for o in cur if o not in _KNOWN_OBJS]
+        if new:
+            _pymolrc_autostyle_new(None, new, cur[0] if cur else None)   # fetched: no REMARK 666 MATCH
+            _KNOWN_OBJS.update(new)
+    except Exception as e:
+        print('[pymolrc] autostyle (fetch) skipped: %s' % e)
+    return result
+
+
+_pymolrc_orig_delete = cmd.delete
+
+
+def _pymolrc_delete_hook(name='all', *a, **k):
+    # Keep _KNOWN_OBJS / per-object state in sync so delete + reload of the same name
+    # re-styles correctly. Deletes are rare, so the O(M) reconcile here is fine.
+    result = _pymolrc_orig_delete(name, *a, **k)
+    try:
+        live = set(cmd.get_object_list())
+        _KNOWN_OBJS.intersection_update(live)
+        for d in [x for x in _STYLED if x not in live]:
+            _STYLED.discard(d)
+        for d in [x for x in _CATRES_BY_OBJ if x not in live]:
+            _CATRES_BY_OBJ.pop(d, None)
+    except Exception:
+        pass
+    return result
+
+
+cmd.delete = _pymolrc_delete_hook
+
+
+cmd.load = _pymolrc_load_hook
+cmd.fetch = _pymolrc_fetch_hook
+
+
+def publication_ray_trace(filename="publication_ray.png", width=3200, height=2400,
+                          dpi=300, transparent=0, _self=cmd):
+    # Apply temporary high-quality ray settings, save PNG, then restore.
+    width = int(width)
+    height = int(height)
+    dpi = int(dpi)
+    transparent = int(transparent)
+    if not filename:
+        filename = "publication_ray.png"
+    if not str(filename).lower().endswith('.png'):
+        filename = str(filename) + '.png'
+
+    tracked = [
+        'antialias', 'ray_trace_mode', 'ray_trace_disco_factor', 'ray_trace_gain',
+        'ray_shadow', 'ray_texture', 'ray_opaque_background', 'stick_quality',
+        'sphere_quality', 'cartoon_sampling'
+    ]
+    old = {}
+    for key in tracked:
+        old[key] = _self.get(key)
+
+    try:
+        _self.set('antialias', 4)
+        _self.set('ray_trace_mode', 1)
+        _self.set('ray_trace_disco_factor', 0)
+        _self.set('ray_trace_gain', 0.12)
+        _self.set('ray_shadow', 'off')
+        _self.set('ray_texture', 0)
+        _self.set('ray_opaque_background', 0 if transparent else 1)
+        _self.set('stick_quality', 16)
+        _self.set('sphere_quality', 3)
+        _self.set('cartoon_sampling', 14)
+        _self.ray(width, height)
+        _self.png(filename, dpi=dpi, ray=0)
+        print('publication_ray_trace: wrote %s (%dx%d, dpi=%d, transparent=%d)' % (
+            filename, width, height, dpi, transparent
+        ))
+    finally:
+        for key in tracked:
+            _self.set(key, old[key])
+
+
+def color_palette(selection="all", ligand_shell_radius=5.0, _self=cmd):
+    """Align all objects to first, cycle foliage palettes by object,
+    color ligands/elements, and show ligand-shell sidechain sticks."""
+    sidechain_palette = ['sc10','sc09','sc08','sc07','sc06',
+                         'sc05','sc04','sc03','sc02','sc01']
+    backbone_palette = ['bb10','bb09','bb08','bb07','bb06',
+                        'bb05','bb04','bb03','bb02','bb01']
+    objects = _self.get_object_list(selection)
+    if len(objects) == 0:
+        return
+    # Align all structures to the first one loaded
+    target = objects[0]
+    for obj in objects[1:]:
+        try:
+            _self.super(obj, target)
+        except:
+            pass
+    # Carbon coloring:
+    # - sidechain and backbone carbons get paired greens per object
+    # - ligand carbons use amethyst for strong protein/ligand contrast
+    for i, obj in enumerate(objects):
+        sc_color = sidechain_palette[i % len(sidechain_palette)]
+        bb_color = backbone_palette[i % len(backbone_palette)]
+        _self.color(sc_color, obj)
+        _self.color(sc_color, '%s and polymer.protein and elem C and not backbone' % obj)
+        _self.color(bb_color, '%s and polymer.protein and elem C and backbone' % obj)
+        _self.unset('cartoon_color', obj)   # cartoon follows CA atom color -> manual `color X, obj` works
+        _self.color('lig_amethyst3', '%s and organic and elem C' % obj)
+    # Color non-carbon elements
+    _self.color('elemN', '%s and elem N' % selection)
+    _self.color('elemO', '%s and elem O' % selection)
+    _self.color('elemS', '%s and elem S' % selection)
+    _self.color('elemP', '%s and elem P' % selection)
+    _self.color('elemH', '%s and elem H' % selection)
+    _self.color('elemZn', '%s and elem Zn' % selection)
+    # Metals as spheres (element/resn/atom-name) + catalytic (REMARK 666) sticks
+    show_metals(selection, _self=_self)
+    for _obj in objects:
+        _color_catres(_obj, _self=_self)
+    if _AF3_CLASH_FILTER_ENABLED:
+        remove_clash_bonds(selection, _self=_self)
+    if _AF3_LIGAND_CENTER_FILTER_ENABLED:
+        remove_ligand_center_pseudobonds(selection, _self=_self)
+
+    # Show ligand and nearby sidechains as sticks for fast active-site views.
+    ligand_sel = '(%s) and organic and not (%s)' % (selection, _METAL_SEL)
+    if _self.count_atoms(ligand_sel) > 0:
+        _self.show('sticks', ligand_sel)
+        _self.set('stick_radius', 0.25, ligand_sel)
+        shell_sel = 'byres ((%s) and polymer.protein within %.2f of %s)' % (
+            selection, float(ligand_shell_radius), ligand_sel)
+        _self.select('_tmp_lig_shell', shell_sel)
+        _self.hide('sticks', '_tmp_lig_shell and polymer.protein and resn GLY')
+        _self.show('sticks', '_tmp_lig_shell and polymer.protein and not resn GLY and sidechain and not elem H')
+        _self.set('stick_radius', 0.25, '_tmp_lig_shell and polymer.protein and not resn GLY and sidechain and not elem H')
+        _self.show('sticks', '_tmp_lig_shell and polymer.protein and not resn GLY and name CA')
+        _self.set('stick_radius', 0.25, '_tmp_lig_shell and polymer.protein and not resn GLY and name CA')
+        _self.show('sticks', '_tmp_lig_shell and polymer.protein and resn PRO and name N')
+        _self.set('stick_radius', 0.25, '_tmp_lig_shell and polymer.protein and resn PRO and name N')
+        _self.delete('_tmp_lig_shell')
+    _self.deselect()
+
+cmd.extend('color_palette', color_palette)
+cmd.extend('remove_clash_bonds', remove_clash_bonds)
+cmd.extend('restore_clash_bonds', restore_clash_bonds)
+cmd.extend('clash_bond_filter', clash_bond_filter)
+cmd.extend('remove_ligand_center_pseudobonds', remove_ligand_center_pseudobonds)
+cmd.extend('restore_ligand_center_bonds', restore_ligand_center_bonds)
+cmd.extend('ligand_center_filter', ligand_center_filter)
+cmd.extend('structure_step', structure_step)
+cmd.extend('structure_next', structure_next)
+cmd.extend('structure_prev', structure_prev)
+cmd.extend('structure_show_all', structure_show_all)
+cmd.extend('bind_structure_navigation_keys', bind_structure_navigation_keys)
+cmd.extend('publication_ray_trace', publication_ray_trace)
+cmd.extend('show_metals', show_metals)
+cmd.extend('show_catres', show_catres)
+cmd.extend('only_catres', only_catres)
+cmd.extend('seq', seq)
+cmd.extend('bg_white', bg_white)
+cmd.extend('bg_black', bg_black)
+cmd.extend('autostyle', autostyle)
+cmd.extend('align_all', align_all)
+cmd.extend('center_all', center_all)
+cmd.extend('autoalign', autoalign)
+cmd.extend('autosolo', autosolo)
+cmd.extend('style_all', style_all)
+cmd.extend('browse_list', browse_list)
+cmd.extend('browse_next', browse_next)
+cmd.extend('browse_prev', browse_prev)
+cmd.extend('browse_step', browse_step)
+cmd.extend('browse_prestyle', browse_prestyle)
+bind_structure_navigation_keys(_self=cmd)
+
+python end

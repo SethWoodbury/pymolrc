@@ -1,0 +1,515 @@
+import numpy as np
+
+# Load custom scripts
+sys.path.append("/home/woodbuse/special_scripts/pymol_rc_scripts/")
+sys.path.append("/home/woodbuse/special_scripts/pymol_rc_scripts/shajesh_scripts_dir/")
+cmd.run('/home/woodbuse/special_scripts/pymol_rc_scripts/tinder.py')
+cmd.run('/home/woodbuse/special_scripts/pymol_rc_scripts/color_by_mutation.py')
+cmd.run('/home/woodbuse/special_scripts/pymol_rc_scripts/show_termini.py')
+
+# Environment
+cmd.space('rgb')
+
+# Rendering and lighting
+set specular, 0
+set ray_shadow, off
+set ray_trace_mode, 1
+set ray_trace_disco_factor, 1
+set ray_trace_gain, 0.1
+set ray_trace_color, black
+set ray_texture, 0
+set antialias, 2
+set power, 0.2
+set ambient, 0.4
+set direct, 0.45
+set reflect, 1
+set reflect_power, 0
+set cartoon_sampling, 10
+
+# Structure display
+set orthoscopic, 1
+set valence, off
+set cartoon_flat_sheets, off
+set cartoon_fancy_sheets, 1
+set cartoon_fancy_helices, 1
+set cartoon_transparency, 0.0
+set cartoon_gap_cutoff, 0
+set ribbon_width, 8
+set line_width, 3
+
+# --- Foliage-forward protein carbon palettes (cycling per object) ---
+set_color sc01 = [165,206,154]
+set_color sc02 = [155,198,147]
+set_color sc03 = [146,191,140]
+set_color sc04 = [137,184,133]
+set_color sc05 = [128,177,126]
+set_color sc06 = [120,170,120]
+set_color sc07 = [112,163,114]
+set_color sc08 = [104,156,108]
+set_color sc09 = [97,149,102]
+set_color sc10 = [90,142,97]
+
+set_color bb01 = [120,172,115]
+set_color bb02 = [108,164,109]
+set_color bb03 = [97,155,99]
+set_color bb04 = [89,146,94]
+set_color bb05 = [81,138,89]
+set_color bb06 = [74,130,84]
+set_color bb07 = [67,122,80]
+set_color bb08 = [61,114,75]
+set_color bb09 = [55,106,71]
+set_color bb10 = [50,99,67]
+
+# --- Ligand carbon options (refined amethyst family) ---
+set_color lig_amethyst1 = [201,170,221]
+set_color lig_amethyst2 = [185,151,208]
+set_color lig_amethyst3 = [168,132,194]
+set_color lig_amethyst4 = [152,114,180]
+set_color lig_amethyst5 = [136,97,166]
+
+# --- Element colors (soft-but-distinct) ---
+set_color elemN = [67,120,209]
+set_color elemO = [214,86,98]
+set_color elemS = [212,177,89]
+set_color elemP = [188,128,78]
+set_color elemH = [237,239,234]
+set_color elemZn = [109,124,142]
+
+# --- Legacy colors (kept for manual use) ---
+set_color nitrogen = [2,118,253]
+set_color pymol_gray, [51,51,51]
+set_color pymol_black, [34,34,34]
+set_color good_yellow, [250,199,44]
+set_color good_teal, [40,176,193]
+set_color good_green, [170,195,47]
+set_color good_pink, [236,114,164]
+set_color good_peach, [249,145,120]
+set_color good_blue, [68,153,231]
+set_color good_gray, [220,220,220]
+set_color good_red, [228,74,62]
+set_color ipd_blue, [65,150,181]
+set_color ipd_purple, [180,31,133]
+
+# --- Seaborn palette ---
+set_color sblightgreen, [153,204,153]
+set_color sblightpurple, [204,153,204]
+set_color sblightorange, [255,219,153]
+set_color sblightblue, [153,153,255]
+set_color sblightred, [255,153,153]
+set_color sblightyellow, [255,255,153]
+
+# --- RFdiffusion gradient ---
+set_color RFd_darkblue, [75,95,170]
+set_color RFd_blue, [102,134,197]
+set_color RFd_lightblue, [149,150,198]
+set_color RFd_purple, [213,154,181]
+set_color RFd_pink, [255,172,183]
+set_color RFd_melon, [255,198,178]
+set_color RFd_navaho, [255,224,172]
+
+# Background
+bg_color black
+
+# --- Auto color and align ---
+python
+
+_AF3_CLASH_FILTER_ENABLED = True
+_AF3_LAST_REMOVED_BONDS = []
+_AF3_LIGAND_CENTER_FILTER_ENABLED = True
+_AF3_LAST_REMOVED_LIGAND_CENTER_BONDS = []
+_AF3_LIGAND_CENTER_ELEMENTS = {'P', 'V'}
+_AF3_STRUCTURE_NAV_INDEX = -1
+_AF3_NON_PTM_CARBON_RESIDUES = {
+    'ALA', 'VAL', 'LEU', 'ILE', 'MET', 'PRO', 'PHE', 'TRP', 'TYR'
+}
+_AF3_AA_RESIDUES = {
+    'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
+    'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL',
+    'MSE', 'SEC', 'PYL'
+}
+_AF3_BACKBONE_ATOM_NAMES = {
+    'N', 'CA', 'C', 'O', 'OXT', 'H', 'H1', 'H2', 'H3', 'HA', 'HA2', 'HA3'
+}
+
+
+def _atom_sel(atom):
+    return 'model %s and index %d' % (atom.model, atom.index)
+
+
+def _is_protein_sidechain_atom(atom):
+    if atom.hetatm:
+        return False
+    if atom.resn not in _AF3_AA_RESIDUES:
+        return False
+    if atom.name in _AF3_BACKBONE_ATOM_NAMES:
+        return False
+    return True
+
+
+def remove_clash_bonds(selection="all", _self=cmd):
+    """Remove likely non-physical inter-residue sidechain bonds in proteins.
+    Stores removed bonds so they can be restored."""
+    global _AF3_LAST_REMOVED_BONDS
+    removed = []
+    objects = _self.get_object_list(selection)
+    for obj in objects:
+        model = _self.get_model('(%s) and (%s)' % (obj, selection))
+        atoms = model.atom
+        for bond in model.bond:
+            a1 = atoms[bond.index[0]]
+            a2 = atoms[bond.index[1]]
+            if (a1.segi, a1.chain, a1.resi_number, a1.resn) == (
+                a2.segi, a2.chain, a2.resi_number, a2.resn
+            ):
+                continue
+            same_chain = (a1.segi, a1.chain) == (a2.segi, a2.chain)
+            if not same_chain:
+                continue
+            sidechain_pair = _is_protein_sidechain_atom(a1) and _is_protein_sidechain_atom(a2)
+            if not sidechain_pair:
+                continue
+
+            hydrophobic_cc = (
+                a1.symbol == 'C' and a2.symbol == 'C' and
+                a1.resn in _AF3_NON_PTM_CARBON_RESIDUES and
+                a2.resn in _AF3_NON_PTM_CARBON_RESIDUES
+            )
+            c_nos_sidechain = (
+                (a1.symbol == 'C' and a2.symbol in ('N', 'O', 'S')) or
+                (a2.symbol == 'C' and a1.symbol in ('N', 'O', 'S'))
+            )
+            if not (hydrophobic_cc or c_nos_sidechain):
+                continue
+            sel1 = _atom_sel(a1)
+            sel2 = _atom_sel(a2)
+            _self.unbond(sel1, sel2)
+            removed.append((a1.model, a1.index, a2.index, int(getattr(bond, 'order', 1))))
+    if removed:
+        _AF3_LAST_REMOVED_BONDS = removed
+        print('remove_clash_bonds: removed %d suspected inter-residue sidechain bonds.' % len(removed))
+    return len(removed)
+
+
+def remove_ligand_center_pseudobonds(selection="all", center_elements="P,V",
+                                     min_coordination=5, _self=cmd):
+    # Remove neighbor-neighbor pseudo-bonds around selected ligand center atoms.
+    global _AF3_LAST_REMOVED_LIGAND_CENTER_BONDS
+    removed = []
+    try:
+        min_coord = int(min_coordination)
+    except:
+        min_coord = 5
+    center_syms = set()
+    for token in str(center_elements).replace(';', ',').split(','):
+        sym = token.strip().upper()
+        if sym:
+            center_syms.add(sym)
+    if not center_syms:
+        center_syms = set(_AF3_LIGAND_CENTER_ELEMENTS)
+
+    objects = _self.get_object_list(selection)
+    for obj in objects:
+        model = _self.get_model('(%s) and (%s) and hetatm' % (obj, selection))
+        atoms = model.atom
+        if not atoms:
+            continue
+
+        adjacency = {}
+        bond_order = {}
+        for bond in model.bond:
+            i, j = bond.index
+            adjacency.setdefault(i, set()).add(j)
+            adjacency.setdefault(j, set()).add(i)
+            key = (i, j) if i < j else (j, i)
+            bond_order[key] = int(getattr(bond, 'order', 1))
+
+        for center_i, center in enumerate(atoms):
+            if not center.hetatm:
+                continue
+            if center.symbol.upper() not in center_syms:
+                continue
+            center_res = (center.segi, center.chain, center.resi_number, center.resn)
+            neighbors = []
+            for nb_i in adjacency.get(center_i, ()):
+                nb = atoms[nb_i]
+                if not nb.hetatm:
+                    continue
+                if (nb.segi, nb.chain, nb.resi_number, nb.resn) != center_res:
+                    continue
+                neighbors.append(nb_i)
+            if len(neighbors) < min_coord:
+                continue
+
+            for i in range(len(neighbors)):
+                for j in range(i + 1, len(neighbors)):
+                    a_i = neighbors[i]
+                    b_i = neighbors[j]
+                    if b_i not in adjacency.get(a_i, set()):
+                        continue
+                    a = atoms[a_i]
+                    b = atoms[b_i]
+                    sel1 = _atom_sel(a)
+                    sel2 = _atom_sel(b)
+                    _self.unbond(sel1, sel2)
+                    key = (a_i, b_i) if a_i < b_i else (b_i, a_i)
+                    removed.append((a.model, a.index, b.index, bond_order.get(key, 1)))
+                    adjacency[a_i].discard(b_i)
+                    adjacency[b_i].discard(a_i)
+    if removed:
+        _AF3_LAST_REMOVED_LIGAND_CENTER_BONDS = removed
+        print('remove_ligand_center_pseudobonds: removed %d ligand center-neighbor pseudo-bonds.' % len(removed))
+    return len(removed)
+
+
+def restore_clash_bonds(_self=cmd):
+    """Restore the last set of bonds removed by remove_clash_bonds."""
+    restored = 0
+    for model, idx1, idx2, order in _AF3_LAST_REMOVED_BONDS:
+        sel1 = 'model %s and index %d' % (model, idx1)
+        sel2 = 'model %s and index %d' % (model, idx2)
+        if _self.count_atoms(sel1) and _self.count_atoms(sel2):
+            _self.bond(sel1, sel2)
+            restored += 1
+            if order != 1:
+                try:
+                    _self.set_bond('valence', order, sel1, sel2)
+                except:
+                    pass
+    print('restore_clash_bonds: restored %d bonds.' % restored)
+    return restored
+
+
+def restore_ligand_center_bonds(_self=cmd):
+    # Restore bonds removed by remove_ligand_center_pseudobonds.
+    restored = 0
+    for model, idx1, idx2, order in _AF3_LAST_REMOVED_LIGAND_CENTER_BONDS:
+        sel1 = 'model %s and index %d' % (model, idx1)
+        sel2 = 'model %s and index %d' % (model, idx2)
+        if _self.count_atoms(sel1) and _self.count_atoms(sel2):
+            _self.bond(sel1, sel2)
+            restored += 1
+            if order != 1:
+                try:
+                    _self.set_bond('valence', order, sel1, sel2)
+                except:
+                    pass
+    print('restore_ligand_center_bonds: restored %d bonds.' % restored)
+    return restored
+
+
+def clash_bond_filter(mode="status", _self=cmd):
+    # Enable or disable automatic clash-bond cleanup in color_palette.
+    global _AF3_CLASH_FILTER_ENABLED
+    token = str(mode).strip().lower()
+    if token in ('on', '1', 'true', 'enable', 'enabled'):
+        _AF3_CLASH_FILTER_ENABLED = True
+    elif token in ('off', '0', 'false', 'disable', 'disabled'):
+        _AF3_CLASH_FILTER_ENABLED = False
+    elif token == 'toggle':
+        _AF3_CLASH_FILTER_ENABLED = not _AF3_CLASH_FILTER_ENABLED
+    elif token not in ('status', ''):
+        print('clash_bond_filter: use on/off/toggle/status')
+    state = 'on' if _AF3_CLASH_FILTER_ENABLED else 'off'
+    print('clash_bond_filter: %s' % state)
+    return int(_AF3_CLASH_FILTER_ENABLED)
+
+
+def ligand_center_filter(mode="status", _self=cmd):
+    # Enable or disable ligand center-neighbor pseudo-bond cleanup.
+    global _AF3_LIGAND_CENTER_FILTER_ENABLED
+    token = str(mode).strip().lower()
+    if token in ('on', '1', 'true', 'enable', 'enabled'):
+        _AF3_LIGAND_CENTER_FILTER_ENABLED = True
+    elif token in ('off', '0', 'false', 'disable', 'disabled'):
+        _AF3_LIGAND_CENTER_FILTER_ENABLED = False
+    elif token == 'toggle':
+        _AF3_LIGAND_CENTER_FILTER_ENABLED = not _AF3_LIGAND_CENTER_FILTER_ENABLED
+    elif token not in ('status', ''):
+        print('ligand_center_filter: use on/off/toggle/status')
+    state = 'on' if _AF3_LIGAND_CENTER_FILTER_ENABLED else 'off'
+    print('ligand_center_filter: %s' % state)
+    return int(_AF3_LIGAND_CENTER_FILTER_ENABLED)
+
+
+def structure_step(step=1, selection="all", _self=cmd):
+    # Cycle through loaded objects and show one structure at a time.
+    global _AF3_STRUCTURE_NAV_INDEX
+    objects = _self.get_object_list(selection)
+    if not objects:
+        print('structure_step: no objects loaded.')
+        return
+    enabled = set(_self.get_names('public_objects', enabled_only=1))
+    if _AF3_STRUCTURE_NAV_INDEX < 0 or _AF3_STRUCTURE_NAV_INDEX >= len(objects):
+        _AF3_STRUCTURE_NAV_INDEX = 0
+        for i, obj in enumerate(objects):
+            if obj in enabled:
+                _AF3_STRUCTURE_NAV_INDEX = i
+                break
+    _AF3_STRUCTURE_NAV_INDEX = (_AF3_STRUCTURE_NAV_INDEX + int(step)) % len(objects)
+    target = objects[_AF3_STRUCTURE_NAV_INDEX]
+    _self.disable('all')
+    _self.enable(target)
+    _self.orient(target, animate=0)
+    print('structure_step: %s (%d/%d)' % (target, _AF3_STRUCTURE_NAV_INDEX + 1, len(objects)))
+    return target
+
+
+def structure_next(selection="all", _self=cmd):
+    return structure_step(1, selection, _self=_self)
+
+
+def structure_prev(selection="all", _self=cmd):
+    return structure_step(-1, selection, _self=_self)
+
+
+def structure_show_all(selection="all", _self=cmd):
+    _self.enable(selection)
+    print('structure_show_all: enabled all objects.')
+    return _self.count_atoms(selection)
+
+
+def bind_structure_navigation_keys(_self=cmd):
+    # PgUp/PgDn and arrow keys cycle structures.
+    _self.set_key('pgup', 'structure_prev')
+    _self.set_key('pgdn', 'structure_next')
+    _self.set_key('up', 'structure_prev')
+    _self.set_key('down', 'structure_next')
+    return 1
+
+
+_pymolrc_orig_load = cmd.load
+_pymolrc_orig_fetch = cmd.fetch
+
+
+def _pymolrc_load_then_center(*args, **kwargs):
+    result = _pymolrc_orig_load(*args, **kwargs)
+    cmd.center('all', animate=-1)
+    return result
+
+
+def _pymolrc_fetch_then_center(*args, **kwargs):
+    result = _pymolrc_orig_fetch(*args, **kwargs)
+    cmd.center('all', animate=-1)
+    return result
+
+
+cmd.load = _pymolrc_load_then_center
+cmd.fetch = _pymolrc_fetch_then_center
+
+
+def publication_ray_trace(filename="publication_ray.png", width=3200, height=2400,
+                          dpi=300, transparent=0, _self=cmd):
+    # Apply temporary high-quality ray settings, save PNG, then restore.
+    width = int(width)
+    height = int(height)
+    dpi = int(dpi)
+    transparent = int(transparent)
+    if not filename:
+        filename = "publication_ray.png"
+    if not str(filename).lower().endswith('.png'):
+        filename = str(filename) + '.png'
+
+    tracked = [
+        'antialias', 'ray_trace_mode', 'ray_trace_disco_factor', 'ray_trace_gain',
+        'ray_shadow', 'ray_texture', 'ray_opaque_background', 'stick_quality',
+        'sphere_quality', 'cartoon_sampling'
+    ]
+    old = {}
+    for key in tracked:
+        old[key] = _self.get(key)
+
+    try:
+        _self.set('antialias', 4)
+        _self.set('ray_trace_mode', 1)
+        _self.set('ray_trace_disco_factor', 0)
+        _self.set('ray_trace_gain', 0.12)
+        _self.set('ray_shadow', 'off')
+        _self.set('ray_texture', 0)
+        _self.set('ray_opaque_background', 0 if transparent else 1)
+        _self.set('stick_quality', 16)
+        _self.set('sphere_quality', 3)
+        _self.set('cartoon_sampling', 14)
+        _self.ray(width, height)
+        _self.png(filename, dpi=dpi, ray=0)
+        print('publication_ray_trace: wrote %s (%dx%d, dpi=%d, transparent=%d)' % (
+            filename, width, height, dpi, transparent
+        ))
+    finally:
+        for key in tracked:
+            _self.set(key, old[key])
+
+
+def color_palette(selection="all", ligand_shell_radius=5.0, _self=cmd):
+    """Align all objects to first, cycle foliage palettes by object,
+    color ligands/elements, and show ligand-shell sidechain sticks."""
+    sidechain_palette = ['sc10','sc09','sc08','sc07','sc06',
+                         'sc05','sc04','sc03','sc02','sc01']
+    backbone_palette = ['bb10','bb09','bb08','bb07','bb06',
+                        'bb05','bb04','bb03','bb02','bb01']
+    objects = _self.get_object_list(selection)
+    if len(objects) == 0:
+        return
+    # Align all structures to the first one loaded
+    target = objects[0]
+    for obj in objects[1:]:
+        try:
+            _self.super(obj, target)
+        except:
+            pass
+    # Carbon coloring:
+    # - sidechain and backbone carbons get paired greens per object
+    # - ligand carbons use amethyst for strong protein/ligand contrast
+    for i, obj in enumerate(objects):
+        sc_color = sidechain_palette[i % len(sidechain_palette)]
+        bb_color = backbone_palette[i % len(backbone_palette)]
+        _self.color(sc_color, obj)
+        _self.color(sc_color, '%s and polymer.protein and elem C and not backbone' % obj)
+        _self.color(bb_color, '%s and polymer.protein and elem C and backbone' % obj)
+        _self.set('cartoon_color', bb_color, obj)
+        _self.color('lig_amethyst3', '%s and organic and elem C' % obj)
+    # Color non-carbon elements
+    _self.color('elemN', '%s and elem N' % selection)
+    _self.color('elemO', '%s and elem O' % selection)
+    _self.color('elemS', '%s and elem S' % selection)
+    _self.color('elemP', '%s and elem P' % selection)
+    _self.color('elemH', '%s and elem H' % selection)
+    _self.color('elemZn', '%s and elem Zn' % selection)
+    if _AF3_CLASH_FILTER_ENABLED:
+        remove_clash_bonds(selection, _self=_self)
+    if _AF3_LIGAND_CENTER_FILTER_ENABLED:
+        remove_ligand_center_pseudobonds(selection, _self=_self)
+
+    # Show ligand and nearby sidechains as sticks for fast active-site views.
+    ligand_sel = '(%s) and organic' % selection
+    if _self.count_atoms(ligand_sel) > 0:
+        _self.show('sticks', ligand_sel)
+        _self.set('stick_radius', 0.25, ligand_sel)
+        shell_sel = 'byres ((%s) and polymer.protein within %.2f of %s)' % (
+            selection, float(ligand_shell_radius), ligand_sel)
+        _self.select('_tmp_lig_shell', shell_sel)
+        _self.hide('sticks', '_tmp_lig_shell and polymer.protein and resn GLY')
+        _self.show('sticks', '_tmp_lig_shell and polymer.protein and not resn GLY and sidechain and not elem H')
+        _self.set('stick_radius', 0.25, '_tmp_lig_shell and polymer.protein and not resn GLY and sidechain and not elem H')
+        _self.show('sticks', '_tmp_lig_shell and polymer.protein and not resn GLY and name CA')
+        _self.set('stick_radius', 0.25, '_tmp_lig_shell and polymer.protein and not resn GLY and name CA')
+        _self.show('sticks', '_tmp_lig_shell and polymer.protein and resn PRO and name N')
+        _self.set('stick_radius', 0.25, '_tmp_lig_shell and polymer.protein and resn PRO and name N')
+        _self.delete('_tmp_lig_shell')
+    _self.deselect()
+
+cmd.extend('color_palette', color_palette)
+cmd.extend('remove_clash_bonds', remove_clash_bonds)
+cmd.extend('restore_clash_bonds', restore_clash_bonds)
+cmd.extend('clash_bond_filter', clash_bond_filter)
+cmd.extend('remove_ligand_center_pseudobonds', remove_ligand_center_pseudobonds)
+cmd.extend('restore_ligand_center_bonds', restore_ligand_center_bonds)
+cmd.extend('ligand_center_filter', ligand_center_filter)
+cmd.extend('structure_step', structure_step)
+cmd.extend('structure_next', structure_next)
+cmd.extend('structure_prev', structure_prev)
+cmd.extend('structure_show_all', structure_show_all)
+cmd.extend('bind_structure_navigation_keys', bind_structure_navigation_keys)
+cmd.extend('publication_ray_trace', publication_ray_trace)
+bind_structure_navigation_keys(_self=cmd)
+
+python end
