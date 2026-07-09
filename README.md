@@ -23,14 +23,13 @@ Your **original aesthetic is preserved byte-for-byte** (foliage greens, amethyst
 ligand, element colors, render/lighting settings, black background, `color_palette`).
 Only the functional fixes you asked for were added.
 
-## Backups in this folder
-- `pymolrc_backup_2026-06-12.pymolrc` — your ORIGINAL (revert target).
-- `pymolrc_BAD_newschemes_2026-06-12.pymolrc` — the rejected "new color schemes"
-  version (kept only as a bad backup; do not use).
+## Backup (local only, not committed)
+`pymolrc_backup_2026-06-12.pymolrc` — the ORIGINAL pre-fix config, kept next to this
+repo as a revert target. It's git-ignored, so it stays local and isn't pushed to GitHub.
 
 ## Revert
 ```bash
-cp /home/woodbuse/pymolrc_stuff/pymolrc_backup_2026-06-12.pymolrc /home/woodbuse/.pymolrc
+cp ~/pymolrc/pymolrc_backup_2026-06-12.pymolrc ~/.pymolrc
 ```
 
 ## What was changed (and ONLY this)

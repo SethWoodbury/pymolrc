@@ -1,0 +1,6 @@
+# Local-only backup of the original config (revert target) — not published
+pymolrc_backup_2026-06-12.pymolrc
+
+# Python cruft
+__pycache__/
+*.pyc
