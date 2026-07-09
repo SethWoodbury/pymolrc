@@ -11,9 +11,9 @@ cp .pymolrc ~/.pymolrc        # back up any existing ~/.pymolrc first
 # or symlink:  ln -s "$PWD/.pymolrc" ~/.pymolrc
 ```
 
-> On load, the config optionally runs one local helper (`show_termini.py`) from
-> `~/special_scripts/` if present. It isn't bundled here; the call is guarded, so a
-> fresh clone loads fine without it.
+> On load, the config runs the bundled `show_termini.py` (marks protein N- and
+> C-termini with colored spheres). It lives in this repo next to `.pymolrc`, so a
+> fresh clone gets the command automatically.
 
 ---
 

@@ -1,12 +1,19 @@
 import numpy as np
 
-# Load the local helper script if present (show_termini). Not bundled with this
-# repo, so a fresh clone that lacks it skips this block and loads fine.
+# Load show_termini.py (bundled in the pymolrc repo). Look next to this file, then
+# in ~/pymolrc, and run whichever copy is found — so a fresh clone works too.
 import os as _os
-_RC_SCRIPTS = "/home/woodbuse/special_scripts/pymol_rc_scripts/"
-if _os.path.exists(_RC_SCRIPTS + "show_termini.py"):
-    sys.path.append(_RC_SCRIPTS)
-    cmd.run(_RC_SCRIPTS + "show_termini.py")
+_TERMINI_DIRS = []
+try:
+    _TERMINI_DIRS.append(_os.path.dirname(_os.path.abspath(__file__)))
+except NameError:
+    pass
+_TERMINI_DIRS.append(_os.path.expanduser("~/pymolrc"))
+for _d in _TERMINI_DIRS:
+    if _os.path.exists(_os.path.join(_d, "show_termini.py")):
+        sys.path.append(_d)
+        cmd.run(_os.path.join(_d, "show_termini.py"))
+        break
 
 # Environment
 cmd.space('rgb')
