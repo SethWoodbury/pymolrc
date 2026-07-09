@@ -61,6 +61,9 @@ cp ~/pymolrc/pymolrc_backup_2026-06-12.pymolrc ~/.pymolrc
   `style_all [sel]` · `bg_white` · `bg_black`
 - Align: `align_all [ref]` (structural superpose all → ref; `super` + `cealign` fallback) ·
   `center_all [ref]` (instant translate-only co-centering)
+- Color: `color_bb_rfdiffusion [selection]` — apply the RFdiffusion gradient (dark blue → navaho)
+  N→C across residues. Defaults to `chain A`, carbons only (non-C atoms untouched).
+  Options: `all_atom=1` (recolor every element) · `backbone_only=1` (keep sidechains as-is).
 - Toggles: `autostyle on|off` · `autoalign on|off` · `autosolo on|off`
 - Unchanged: `color_palette`, `structure_*`, `publication_ray_trace`, …
 

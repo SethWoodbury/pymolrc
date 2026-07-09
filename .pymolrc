@@ -1101,7 +1101,33 @@ def color_palette(selection="all", ligand_shell_radius=5.0, _self=cmd):
         _self.delete('_tmp_lig_shell')
     _self.deselect()
 
+
+def _rfd_bool(v):
+    return str(v).strip().lower() in ('1', 'true', 'on', 'yes', 't', 'y')
+
+
+def color_bb_rfdiffusion(selection="chain A", all_atom=0, backbone_only=0, _self=cmd):
+    """Color `selection` N->C with the RFdiffusion gradient (dark blue -> navaho).
+
+    By default only CARBON atoms are recolored, leaving non-carbon atoms untouched.
+      selection       one or more chains / any selection (default 'chain A'; e.g. 'chain A+B')
+      all_atom=1      recolor every element, not just carbons
+      backbone_only=1 restrict to backbone atoms (sidechains keep their colors)
+    Combos -> default: all carbons; backbone_only: backbone carbons;
+    all_atom: every atom; all_atom+backbone_only: all backbone atoms.
+    """
+    palette = ("RFd_darkblue RFd_blue RFd_lightblue RFd_purple "
+               "RFd_pink RFd_melon RFd_navaho")
+    sel = "(%s)" % selection
+    if not _rfd_bool(all_atom):
+        sel += " and elem C"
+    if _rfd_bool(backbone_only):
+        sel += " and backbone"
+    _self.spectrum("resi", palette, sel)
+
+
 cmd.extend('color_palette', color_palette)
+cmd.extend('color_bb_rfdiffusion', color_bb_rfdiffusion)
 cmd.extend('remove_clash_bonds', remove_clash_bonds)
 cmd.extend('restore_clash_bonds', restore_clash_bonds)
 cmd.extend('clash_bond_filter', clash_bond_filter)
