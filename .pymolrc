@@ -1206,12 +1206,58 @@ def gaussian_spin(toggle="on", _self=cmd):
         _self.mclear()
 
 
+def rfd3_movie(traj_file, cloud=1, name="rfd3_traj", _self=cmd):
+    """Set up an RFdiffusion3 diffusion movie from ONE trajectory .cif.gz.
+
+    A `*_noisy_model_*.cif.gz` or `*_denoised_model_*.cif.gz` file is itself a
+    100-state diffusion trajectory (frames pre-reversed for PyMOL). This loads that
+    ONE file (~0.3 GB, safe), shows CA atoms as spheres diffusing into place, the
+    V0-V8 sidechain atoms as a faint condensing cloud, and holds the fixed motif +
+    cofactor + Zn static. Then type `mplay` to run it (noise -> folded).
+      cloud : 1 = faint V-atom sidechain cloud on; 0 = CA spheres only
+      name  : object name (default 'rfd3_traj')
+    Robust to chain naming: diffusing = resn UNK, fixed cofactor/Zn = hetatm.
+    Uses `defer_builds_mode 3` for a light multi-state movie; to return to fast
+    single-structure browsing afterwards, `set defer_builds_mode, 0`.
+    """
+    import os as _o
+    import pymol.util as _util
+    _self.set("defer_builds_mode", 3)
+    _self.delete(name)
+    _self.load(_o.path.expanduser(traj_file), name)
+    ns = _self.count_states(name)
+    Vsel = "%s and name V0+V1+V2+V3+V4+V5+V6+V7+V8" % name
+    _self.hide("everything", name)
+    _self.show("spheres", "%s and name CA and not hetatm" % name)
+    _self.set("sphere_scale", 0.4, "%s and name CA" % name)
+    if _rfd_bool(cloud):
+        _self.show("spheres", Vsel)
+        _self.set("sphere_scale", 0.13, Vsel)
+        _self.set("sphere_transparency", 0.55, Vsel)
+    _self.show("sticks", "%s and hetatm" % name)
+    _self.set("stick_radius", 0.18, "%s and hetatm" % name)
+    _self.show("spheres", "%s and hetatm and elem Zn" % name)
+    _self.set("sphere_scale", 0.5, "%s and hetatm and elem Zn" % name)
+    _self.color("cyan", "%s and resn UNK and name CA" % name)
+    _self.color("orange", "%s and name CA and not resn UNK and not hetatm" % name)
+    _self.color("grey70", Vsel)
+    _util.cbag("%s and hetatm" % name)
+    _self.color("grey60", "%s and hetatm and elem Zn" % name)
+    _self.mset("1 -%d" % ns)
+    _self.set("all_states", 0)
+    _self.orient(name)
+    _self.frame(1)
+    print("rfd3_movie: loaded %d diffusion states from %s. Type `mplay` to run "
+          "(noise -> folded)." % (ns, _o.path.basename(str(traj_file))))
+
+
 cmd.extend('color_palette', color_palette)
 cmd.extend('color_bb_rfdiffusion', color_bb_rfdiffusion)
 cmd.extend('color_bb_rfdiffusion3', color_bb_rfdiffusion3)
 cmd.extend('gaussian_mode', gaussian_mode)
 cmd.extend('gaussian_off', gaussian_off)
 cmd.extend('gaussian_spin', gaussian_spin)
+cmd.extend('rfd3_movie', rfd3_movie)
 cmd.extend('remove_clash_bonds', remove_clash_bonds)
 cmd.extend('restore_clash_bonds', restore_clash_bonds)
 cmd.extend('clash_bond_filter', clash_bond_filter)
