@@ -1,6 +1,9 @@
 # Local-only backup of the original config (revert target) — not published
 pymolrc_backup_2026-06-12.pymolrc
 
+# Local example PDBs + preview renders (research structures — kept local, not published)
+example_pdbs/
+
 # Python cruft
 __pycache__/
 *.pyc

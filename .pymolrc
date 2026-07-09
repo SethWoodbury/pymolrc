@@ -1155,9 +1155,63 @@ def color_bb_rfdiffusion3(selection="chain A", all_atom=0, backbone_only=0, _sel
                    "%s and resi %d-%d" % (sel, mid + 1, hi))
 
 
+def gaussian_mode(selection="all", _self=cmd):
+    """Quantum-chemistry / GaussView look: glossy ball-and-stick (every atom incl.
+    H as a shiny sphere, metal larger), bond orders, and perspective. Colors are
+    left as-is. Run `gaussian_off` to restore the normal look."""
+    sel = "(%s)" % selection
+    _self.show("sticks", sel)
+    _self.show("spheres", sel)
+    _self.set("stick_radius", 0.13, sel)
+    _self.set("sphere_scale", 0.23, sel)
+    _self.set("sphere_scale", 0.5, sel + " and metals")
+    _self.set("specular", 1.0)
+    _self.set("shininess", 55)
+    _self.set("sphere_quality", 3)
+    _self.set("stick_quality", 12)
+    _self.set("valence", 1)
+    _self.set("orthoscopic", 0)
+    _self.rebuild()
+
+
+def gaussian_off(selection="all", _self=cmd):
+    """Undo gaussian_mode: restore matte / orthographic / normal sizes and re-apply
+    the standard style."""
+    sel = "(%s)" % selection
+    _self.unset("shininess")
+    _self.unset("sphere_quality")
+    _self.unset("stick_quality")
+    _self.set("specular", 0)
+    _self.set("valence", 0)
+    _self.set("orthoscopic", 1)
+    _self.unset("sphere_scale", sel)
+    _self.unset("stick_radius", sel)
+    _self.set("sphere_scale", 0.7)
+    _self.set("stick_radius", 0.25)
+    _self.hide("spheres", sel + " and not metals")
+    _self.rebuild()
+    style_all(selection, _self=_self)
+
+
+def gaussian_spin(toggle="on", _self=cmd):
+    """Gentle continuous spin for the 'animating' effect (GUI only).
+    `gaussian_spin on` starts a looping y-roll; `gaussian_spin off` stops it."""
+    import pymol.util as _util
+    if _rfd_bool(toggle):
+        _self.mset("1 x120")
+        _util.mroll(1, 120, 1)
+        _self.mplay()
+    else:
+        _self.mstop()
+        _self.mclear()
+
+
 cmd.extend('color_palette', color_palette)
 cmd.extend('color_bb_rfdiffusion', color_bb_rfdiffusion)
 cmd.extend('color_bb_rfdiffusion3', color_bb_rfdiffusion3)
+cmd.extend('gaussian_mode', gaussian_mode)
+cmd.extend('gaussian_off', gaussian_off)
+cmd.extend('gaussian_spin', gaussian_spin)
 cmd.extend('remove_clash_bonds', remove_clash_bonds)
 cmd.extend('restore_clash_bonds', restore_clash_bonds)
 cmd.extend('clash_bond_filter', clash_bond_filter)

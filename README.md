@@ -42,6 +42,8 @@ The bundled `show_termini.py` sits next to `.pymolrc` and loads automatically.
 | `publication_ray_trace` | ray-traced figure render |
 | `color_bb_rfdiffusion [sel]` | RFdiffusion gradient (dark blue → navaho), N→C |
 | `color_bb_rfdiffusion3 [sel]` | RFdiffusion3 gradient (pink → purple → teal → dark blue), N→C |
+| `gaussian_mode [sel]` · `gaussian_off [sel]` | GaussView / QM look (glossy ball-and-stick, bond orders, perspective), and restore |
+| `gaussian_spin` `on\|off` | gentle continuous spin (GUI) |
 
 The `color_bb_*` commands default to `chain A` and recolor carbons only (non-carbon atoms
 left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep
