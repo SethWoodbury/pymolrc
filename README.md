@@ -64,6 +64,8 @@ cp ~/pymolrc/pymolrc_backup_2026-06-12.pymolrc ~/.pymolrc
 - Color: `color_bb_rfdiffusion [selection]` — apply the RFdiffusion gradient (dark blue → navaho)
   N→C across residues. Defaults to `chain A`, carbons only (non-C atoms untouched).
   Options: `all_atom=1` (recolor every element) · `backbone_only=1` (keep sidechains as-is).
+- Color: `color_bb_rfdiffusion3 [selection]` — RFdiffusion3 gradient (pink → purple → teal → dark blue)
+  N→C, teal auto-centered at the chain midpoint. Same defaults/options as above.
 - Toggles: `autostyle on|off` · `autoalign on|off` · `autosolo on|off`
 - Unchanged: `color_palette`, `structure_*`, `publication_ray_trace`, …
 
