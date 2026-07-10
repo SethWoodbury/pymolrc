@@ -50,6 +50,12 @@ The `color_bb_*` commands default to `chain A` and recolor carbons only (non-car
 left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep
 sidechains as they are.
 
+## Examples
+
+`example_pdbs/` holds sample structures to try the commands on:
+- `ZETA_1__A1_metalloesterase_theozyme.pdb` — a metalloesterase theozyme (Zn + His triad + substrate); good for `gaussian_mode` and `color_bb_*`.
+- `ZAPP_p1D1_i14_rfd3_noisy_trajectory.cif.gz` — an RFdiffusion3 diffusion trajectory for `rfd3_movie`.
+
 ## Reverting
 
 The original pre-fix config is kept locally (git-ignored) as
