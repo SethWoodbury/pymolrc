@@ -1206,26 +1206,34 @@ def gaussian_spin(toggle="on", _self=cmd):
         _self.mclear()
 
 
-def rfd3_movie(traj_file, color_scheme=1, cloud=1, name="rfd3_traj", _self=cmd):
+def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
+               fixed_json="", name="rfd3_traj", _self=cmd):
     """Set up an RFdiffusion3 diffusion movie from ONE trajectory .cif.gz.
 
     A `*_noisy_model_*.cif.gz` / `*_denoised_model_*.cif.gz` file is itself a
     100-state diffusion trajectory (frames pre-reversed for PyMOL). Loads that ONE
     file (~0.3 GB, safe). DIFFUSING residues (resn UNK) show as CA spheres + a faint
-    V0-V8 sidechain cloud diffusing into place; FIXED atoms (everything with an
-    assigned identity -- the catalytic motif + cofactor + metal) are auto-detected
-    and rendered in your normal style via `style_all` (sticks/metals), staying put.
-    Then type `mplay` to run it (noise -> folded).
-      color_scheme : 1 = color the diffusing protein by the RFdiffusion3 gradient
-                     (`color_bb_rfdiffusion3`); 0 = plain cyan.
+    V0-V8 sidechain cloud diffusing into place, colored by the RFdiffusion3 gradient
+    (`color_scheme=1`; 0 = plain cyan). FIXED atoms (the catalytic motif + cofactor +
+    metal) are auto-detected, held static, and highlighted as `fixed_color` (default
+    orange) sticks/spheres. Then type `mplay` (noise -> folded).
+
+    If the design JSON is found -- auto-derived from the trajectory name
+    (`..._model_N.json`) or given as `fixed_json=<path>` -- its `select_fixed_atoms`
+    residue count is cross-checked against detection and any mismatch is warned. (Its
+    per-atom spec can't be applied to the trajectory, which uses V-atom placeholders
+    in separate chains; it's authoritative for the final `_model_*.cif.gz` only.)
+
+      color_scheme : 1 = RFd3 gradient on the diffusing protein; 0 = plain cyan.
       cloud        : 1 = faint V-atom sidechain cloud on; 0 = CA spheres only.
-      name         : object name (default 'rfd3_traj').
-    Fixed-atom detection uses `not resn UNK` (RFD3 leaves diffusing residues unnamed);
-    verified to match the atoms that don't move across the trajectory. Uses
-    `defer_builds_mode 3` for a light multi-state movie; `set defer_builds_mode, 0`
+      fixed_color  : color for the fixed motif/cofactor (default 'orange').
+      fixed_json   : optional path to the design JSON (else auto-derived).
+    Fixed-atom detection uses `not resn UNK`; verified to equal the atoms that don't
+    move across the trajectory. Uses `defer_builds_mode 3`; `set defer_builds_mode, 0`
     to return to fast single-structure browsing.
     """
     import os as _o
+    import json as _json
     _self.set("defer_builds_mode", 3)
     _self.delete(name)
     _self.load(_o.path.expanduser(traj_file), name)
@@ -1246,13 +1254,44 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, name="rfd3_traj", _self=cmd):
         _self.color("cyan", "%s and name CA" % move)
         if _rfd_bool(cloud):
             _self.color("grey70", Vsel)
-    style_all(fixed, _self=_self)
+    # fixed motif + cofactor + metal: highlight as sticks/spheres
+    _self.show("sticks", fixed)
+    _self.set("stick_radius", 0.2, fixed)
+    _self.show("spheres", "(%s) and not hetatm" % fixed)
+    _self.set("sphere_scale", 0.28, "(%s) and not hetatm" % fixed)
+    _self.show("spheres", "(%s) and metals" % fixed)
+    _self.set("sphere_scale", 0.5, "(%s) and metals" % fixed)
+    _self.color(fixed_color, fixed)
+    # optional cross-check against the design JSON's select_fixed_atoms
+    _jp = _o.path.expanduser(fixed_json) if fixed_json else ""
+    if not _jp:
+        _b = _o.path.expanduser(str(traj_file))
+        for _suf in (".cif.gz", ".cif", ".pdb.gz", ".pdb"):
+            if _b.endswith(_suf):
+                _b = _b[:-len(_suf)]
+                break
+        _jp = _b.replace("_noisy_model_", "_model_").replace("_denoised_model_", "_model_") + ".json"
+    _note = ""
+    if _o.path.exists(_jp):
+        try:
+            _spec = _json.load(open(_jp)).get("specification", {})
+            _nj = len(_spec.get("select_fixed_atoms", {}))
+            _rset = set()
+            _self.iterate("(%s) and not hetatm" % fixed, "_rset.add((chain, resi))",
+                          space={'_rset': _rset})
+            _nd = len(_rset)
+            if _nj == _nd:
+                _note = " JSON select_fixed_atoms: %d residues (matches)." % _nj
+            else:
+                _note = " WARNING: JSON lists %d fixed residues, detected %d." % (_nj, _nd)
+        except Exception as _e:
+            _note = " (could not read JSON: %s)" % _e
     _self.mset("1 -%d" % ns)
     _self.set("all_states", 0)
     _self.orient(name)
     _self.frame(1)
-    print("rfd3_movie: %d diffusion states loaded; %d fixed atoms styled normally. "
-          "Type `mplay` to run (noise -> folded)." % (ns, _self.count_atoms(fixed)))
+    print("rfd3_movie: %d states; %d fixed atoms (%s).%s Type `mplay` (noise -> folded)."
+          % (ns, _self.count_atoms(fixed), fixed_color, _note))
 
 
 cmd.extend('color_palette', color_palette)

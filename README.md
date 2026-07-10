@@ -44,7 +44,7 @@ The bundled `show_termini.py` sits next to `.pymolrc` and loads automatically.
 | `color_bb_rfdiffusion3 [sel]` | RFdiffusion3 gradient (pink → purple → teal → dark blue), N→C |
 | `gaussian_mode [sel]` · `gaussian_off [sel]` | GaussView / QM look (glossy ball-and-stick, bond orders, perspective), and restore |
 | `gaussian_spin` `on\|off` | gentle continuous spin (GUI) |
-| `rfd3_movie <traj.cif.gz>` | RFdiffusion3 diffusion movie from one trajectory file: diffusing protein as CA spheres + sidechain V-cloud colored by the RFd3 gradient; fixed motif/cofactor/Zn auto-detected and shown in your normal style; then `mplay` |
+| `rfd3_movie <traj.cif.gz>` | RFdiffusion3 diffusion movie from one trajectory: diffusing protein as CA spheres + V-cloud in the RFd3 gradient; fixed motif/cofactor/Zn auto-detected, held static, highlighted (orange by default, `fixed_color=`); cross-checks the design JSON (`fixed_json=` or auto-derived) if present; then `mplay` |
 
 The `color_bb_*` commands default to `chain A` and recolor carbons only (non-carbon atoms
 left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep

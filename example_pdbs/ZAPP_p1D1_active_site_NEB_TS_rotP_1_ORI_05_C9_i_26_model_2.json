@@ -1,0 +1,93 @@
+{
+    "diffused_index_map": {
+        "A16": "A166",
+        "A89": "A112",
+        "A92": "A115",
+        "A93": "A116",
+        "A133": "A144",
+        "A170": "A163"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A16": 1.1003985404968262,
+            "A89": 0.4991404712200165,
+            "A133": 0.2740935981273651,
+            "A170": 0.29659152030944824
+        },
+        "insertion.mae": 0.575618510444959,
+        "insertion.rmcd": 0.3530884385108948,
+        "insertion_rmsd": 0.38374503205219906,
+        "join_point_rmsd": 0.542556032538414,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.15294313430786133,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 0,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 3.2544126510620117,
+        "non_loop_fraction": 0.7222222222222222,
+        "loop_fraction": 0.2777777777777778,
+        "helix_fraction": 0.7222222222222222,
+        "sheet_fraction": 0.0,
+        "num_ss_elements": 10,
+        "radius_of_gyration": 15.249723187595983,
+        "alanine_content": 0.255,
+        "glycine_content": 0.07,
+        "num_residues": 200,
+        "diffused_com": [
+            -1.692546010017395,
+            -0.6779223084449768,
+            1.3540575504302979
+        ],
+        "fixed_com": [
+            3.0739030838012695,
+            0.6151189804077148,
+            -0.8670589327812195
+        ]
+    },
+    "specification": {
+        "input": "/home/aruder2/projects/PTE_design/theozymes/i1_rfd3_theozymes/step2_theozyme_prep_ori/ZAPP_p1D1_active_site_NEB_TS_rotP_1_ORI_05.pdb",
+        "unindex": "A16,A89,A92,A93,A133,A170",
+        "length": "180-210",
+        "ligand": "YYE",
+        "extra": {
+            "example": "i",
+            "task_name": "ZAPP_p1D1_active_site_NEB_TS_rotP_1_ORI_05_C9_i",
+            "sampled_contig": "200P",
+            "num_tokens_in": 207,
+            "num_residues_in": 207,
+            "num_chains": 2,
+            "num_atoms": 1063,
+            "num_residues": 208,
+            "example_id": "ZAPP_p1D1_active_site_NEB_TS_rotP_1_ORI_05_C9_i_26"
+        },
+        "select_fixed_atoms": {
+            "A16": "NZ,CE",
+            "A89": "NE2,CE1,ND1,CG,CD2,CB",
+            "A92": "ALL",
+            "A93": "ALL",
+            "A133": "NE2,CE1,ND1,CG,CD2,CB",
+            "A170": "NE2,CE1,ND1,CG,CD2,CB"
+        },
+        "select_unfixed_sequence": false,
+        "select_buried": {
+            "YYE": "C1,O1,O2,ZN1,ZN2,P1,O3,O4,O5,O6,O7,C8,C9,C10,C11"
+        },
+        "select_partially_buried": {
+            "YYE": "C5,C6,C7"
+        },
+        "select_exposed": {
+            "YYE": "N1,O8,O9"
+        },
+        "select_hbond_acceptor": {
+            "YYE": "O5,O7"
+        },
+        "ori_token": [
+            -1.01,
+            -0.217,
+            0.633
+        ]
+    },
+    "ckpt_path": "/projects/ml/aa_design/models/rfd3_latest_foundry.ckpt",
+    "seed": 2629404066
+}
