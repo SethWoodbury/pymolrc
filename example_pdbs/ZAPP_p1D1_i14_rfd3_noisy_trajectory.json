@@ -1,48 +1,48 @@
 {
     "diffused_index_map": {
-        "A16": "A166",
-        "A89": "A112",
-        "A92": "A115",
-        "A93": "A116",
-        "A133": "A144",
-        "A170": "A163"
+        "A16": "A75",
+        "A89": "A146",
+        "A92": "A149",
+        "A93": "A150",
+        "A133": "A175",
+        "A170": "A52"
     },
     "metrics": {
         "join_point_rmsd_by_token": {
-            "A16": 1.1003985404968262,
-            "A89": 0.4991404712200165,
-            "A133": 0.2740935981273651,
-            "A170": 0.29659152030944824
+            "A16": 0.5797941088676453,
+            "A89": 0.4328339695930481,
+            "A133": 0.40752291679382324,
+            "A170": 0.39114341139793396
         },
-        "insertion.mae": 0.575618510444959,
-        "insertion.rmcd": 0.3530884385108948,
-        "insertion_rmsd": 0.38374503205219906,
-        "join_point_rmsd": 0.542556032538414,
+        "insertion.mae": 0.5309045811494192,
+        "insertion.rmcd": 0.3134465093413989,
+        "insertion_rmsd": 0.34502388288577396,
+        "join_point_rmsd": 0.45282360166311264,
         "n_conjoined_residues": 0,
-        "max_ca_deviation": 0.15294313430786133,
+        "max_ca_deviation": 0.21953344345092773,
         "n_chainbreaks": 0,
         "n_clashing.interresidue_clashes_w_sidechain": 0,
         "n_clashing.interresidue_clashes_w_backbone": 0,
         "n_clashing.ligand_clashes": 0,
-        "n_clashing.ligand_min_distance": 3.2544126510620117,
-        "non_loop_fraction": 0.7222222222222222,
-        "loop_fraction": 0.2777777777777778,
-        "helix_fraction": 0.7222222222222222,
+        "n_clashing.ligand_min_distance": 3.8905091285705566,
+        "non_loop_fraction": 0.7696078431372549,
+        "loop_fraction": 0.23039215686274508,
+        "helix_fraction": 0.7696078431372549,
         "sheet_fraction": 0.0,
         "num_ss_elements": 10,
-        "radius_of_gyration": 15.249723187595983,
-        "alanine_content": 0.255,
-        "glycine_content": 0.07,
-        "num_residues": 200,
+        "radius_of_gyration": 16.020252140719297,
+        "alanine_content": 0.30097087378640774,
+        "glycine_content": 0.04854368932038835,
+        "num_residues": 206,
         "diffused_com": [
-            -1.692546010017395,
-            -0.6779223084449768,
-            1.3540575504302979
+            -3.0079398155212402,
+            -0.3794473707675934,
+            -0.13991209864616394
         ],
         "fixed_com": [
-            3.0739030838012695,
-            0.6151189804077148,
-            -0.8670589327812195
+            1.026111364364624,
+            1.1575943231582642,
+            0.3365156948566437
         ]
     },
     "specification": {
@@ -53,13 +53,13 @@
         "extra": {
             "example": "i",
             "task_name": "ZAPP_p1D1_active_site_NEB_TS_rotP_1_ORI_05_C9_i",
-            "sampled_contig": "200P",
-            "num_tokens_in": 207,
-            "num_residues_in": 207,
+            "sampled_contig": "206P",
+            "num_tokens_in": 213,
+            "num_residues_in": 213,
             "num_chains": 2,
-            "num_atoms": 1063,
-            "num_residues": 208,
-            "example_id": "ZAPP_p1D1_active_site_NEB_TS_rotP_1_ORI_05_C9_i_26"
+            "num_atoms": 1093,
+            "num_residues": 214,
+            "example_id": "ZAPP_p1D1_active_site_NEB_TS_rotP_1_ORI_05_C9_i_14"
         },
         "select_fixed_atoms": {
             "A16": "NZ,CE",
