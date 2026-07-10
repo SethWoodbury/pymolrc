@@ -1207,7 +1207,7 @@ def gaussian_spin(toggle="on", _self=cmd):
 
 
 def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
-               fixed_json="", name="rfd3_traj", _self=cmd):
+               fixed_sidechain=0, reverse=0, fixed_json="", name="rfd3_traj", _self=cmd):
     """Set up an RFdiffusion3 diffusion movie from ONE trajectory .cif.gz.
 
     A `*_noisy_model_*.cif.gz` / `*_denoised_model_*.cif.gz` file is itself a
@@ -1215,8 +1215,9 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
     file (~0.3 GB, safe). DIFFUSING residues (resn UNK) show as CA spheres + a faint
     V0-V8 sidechain cloud diffusing into place, colored by the RFdiffusion3 gradient
     (`color_scheme=1`; 0 = plain cyan). FIXED atoms (the catalytic motif + cofactor +
-    metal) are auto-detected, held static, and highlighted as `fixed_color` (default
-    orange) sticks/spheres. Then type `mplay` (noise -> folded).
+    metal) are auto-detected and held static, rendered in your NORMAL pymolrc style
+    (cofactor as ligand, element colors, metals as spheres) with `fixed_color` (default
+    orange) applied ONLY to the fixed PROTEIN carbons. Then type `mplay`.
 
     If the design JSON is found -- auto-derived from the trajectory name
     (`..._model_N.json`) or given as `fixed_json=<path>` -- its `select_fixed_atoms`
@@ -1224,10 +1225,14 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
     per-atom spec can't be applied to the trajectory, which uses V-atom placeholders
     in separate chains; it's authoritative for the final `_model_*.cif.gz` only.)
 
-      color_scheme : 1 = RFd3 gradient on the diffusing protein; 0 = plain cyan.
-      cloud        : 1 = faint V-atom sidechain cloud on; 0 = CA spheres only.
-      fixed_color  : color for the fixed motif/cofactor (default 'orange').
-      fixed_json   : optional path to the design JSON (else auto-derived).
+      color_scheme    : 1 = RFd3 gradient on the diffusing protein; 0 = plain cyan.
+      cloud           : 1 = faint V-atom sidechain cloud on; 0 = CA spheres only.
+      fixed_color     : color for the fixed-protein carbons (default 'orange').
+      fixed_sidechain : 1 = show only the sidechains of fixed residues (hide backbone).
+      reverse         : 1 = play the trajectory in reverse (states N..1). The raw file
+                        loads state 1 = noise -> state N = folded, so the default
+                        (`reverse=0`) plays noise -> folded; flip if it looks backwards.
+      fixed_json      : optional path to the design JSON (else auto-derived).
     Fixed-atom detection uses `not resn UNK`; verified to equal the atoms that don't
     move across the trajectory. Uses `defer_builds_mode 3`; `set defer_builds_mode, 0`
     to return to fast single-structure browsing.
@@ -1254,14 +1259,19 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
         _self.color("cyan", "%s and name CA" % move)
         if _rfd_bool(cloud):
             _self.color("grey70", Vsel)
-    # fixed motif + cofactor + metal: highlight as sticks/spheres
+    # fixed atoms: normal pymolrc coloring first (cofactor as ligand, element colors,
+    # metals as spheres), then `fixed_color` ONLY on the fixed PROTEIN carbons.
+    style_all(fixed, _self=_self)
+    _prot = "(%s) and not hetatm" % fixed
     _self.show("sticks", fixed)
     _self.set("stick_radius", 0.2, fixed)
-    _self.show("spheres", "(%s) and not hetatm" % fixed)
-    _self.set("sphere_scale", 0.28, "(%s) and not hetatm" % fixed)
+    _self.show("spheres", _prot)
+    _self.set("sphere_scale", 0.28, _prot)
     _self.show("spheres", "(%s) and metals" % fixed)
     _self.set("sphere_scale", 0.5, "(%s) and metals" % fixed)
-    _self.color(fixed_color, fixed)
+    _self.color(fixed_color, "%s and elem C" % _prot)
+    if _rfd_bool(fixed_sidechain):
+        _self.hide("everything", "%s and backbone" % _prot)
     # optional cross-check against the design JSON's select_fixed_atoms
     _jp = _o.path.expanduser(fixed_json) if fixed_json else ""
     if not _jp:
@@ -1286,7 +1296,7 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
                 _note = " WARNING: JSON lists %d fixed residues, detected %d." % (_nj, _nd)
         except Exception as _e:
             _note = " (could not read JSON: %s)" % _e
-    _self.mset("1 -%d" % ns)
+    _self.mset(("%d -1" % ns) if _rfd_bool(reverse) else ("1 -%d" % ns))
     _self.set("all_states", 0)
     _self.orient(name)
     _self.frame(1)
