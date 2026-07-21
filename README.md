@@ -45,16 +45,37 @@ The bundled `show_termini.py` sits next to `.pymolrc` and loads automatically.
 | `gaussian_mode [sel]` · `gaussian_off [sel]` | GaussView / QM look (glossy ball-and-stick, bond orders, perspective), and restore |
 | `gaussian_spin` `on\|off` | gentle continuous spin (GUI) |
 | `rfd3_movie <traj.cif.gz>` | RFdiffusion3 diffusion movie from one trajectory: diffusing protein as CA spheres + V-cloud in the RFd3 gradient; fixed motif/cofactor auto-detected, held static (cofactor in your ligand style; `fixed_color` orange on fixed-protein carbons only); options `reverse=1`, `fixed_sidechain=1`, JSON cross-check (`fixed_json=`/auto); then `mplay` |
+| `style_fixed <obj>` | solid, opaque ball-and-stick on an `rfd3_movie` trajectory's fixed theozyme; fixes the "fixed atoms never look opaque" problem at its root (see `docs/RFD3_FIGURES.md`) and grades stick/sphere size so real backbone reads clearly against placeholder sidechain atoms |
+| `apply_camera <obj> [, mode] [, sel] [, custom_view] [, span_states] [, turns]` | one entry point for camera control: `mode="orient"` (auto-frame), `"zoom"` (crop on `sel`), `"view"` (exact `get_view` matrix); `span_states=1` takes one fixed camera from the folded frame for a whole trajectory (RFd3 noise is a collapsed blob, not an expansion — see `docs/RFD3_FIGURES.md`) |
+| `draw_connectors <obj> [, color] [, max_dist]` | dashed lines from each fixed motif residue to its nearest scaffold Cα, on a folded frame — a visual stand-in for "this theozyme residue sits here" when there's no covalent bond to draw |
+| `catalytic_sel_from_motif <clean_obj>, <motif_sel> [, max_match]` | identify a clean (real-sequence) model's catalytic residues by coordinate-matching them to a trajectory's fixed motif — precise even where a ligand-distance cutoff would over-select |
+| `add_custom_bond <sel_a>, <sel_b> [, label]` | force a bond PyMOL won't perceive on its own (e.g. a covalent TS-adduct); writes topology once, holds across every state |
 
 The `color_bb_*` commands default to `chain A` and recolor carbons only (non-carbon atoms
 left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep
 sidechains as they are.
 
+## RFdiffusion3 trajectory figures
+
+`docs/RFD3_FIGURES.md` collects the hard-won principles behind building
+Figure-1-style stills and storyboard movies from an RFd3 trajectory on top of
+the commands above — frame vs. state indexing, why disconnected motif
+fragments ignore transparency, why RFd3 noise is a collapsed blob (not an
+expanding cloud) and what that means for framing a camera, why you must never
+toggle representations per-frame on the live trajectory object, GIF/MP4
+assembly pitfalls, and more. Read it before re-debugging any of these.
+
+`examples/make_rfd3_figure.py` and `examples/make_rfd3_gif.py` are complete,
+runnable worked examples built on the bundled trajectory in `example_pdbs/`
+(`pymol -cq examples/make_rfd3_figure.py`). `scripts/frames_to_movie.py` is
+the pure-Python (no PyMOL) post-processing step they hand off to for
+GIF/MP4 assembly — usable standalone once you have rendered PNG frames.
+
 ## Examples
 
 `example_pdbs/` holds sample structures to try the commands on:
 - `ZETA_1__A1_metalloesterase_theozyme.pdb` — a metalloesterase theozyme (Zn + His triad + substrate); good for `gaussian_mode` and `color_bb_*`.
-- `ZAPP_p1D1_i14_rfd3_noisy_trajectory.cif.gz` — an RFdiffusion3 diffusion trajectory for `rfd3_movie`.
+- `ZAPP_p1D1_i14_rfd3_noisy_trajectory.cif.gz` — an RFdiffusion3 diffusion trajectory for `rfd3_movie` and the `examples/` scripts above.
 
 ## Reverting
 
