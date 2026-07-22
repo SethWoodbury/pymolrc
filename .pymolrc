@@ -1206,6 +1206,66 @@ def gaussian_spin(toggle="on", _self=cmd):
         _self.mclear()
 
 
+def rfd3_check_frames(obj, reverse=None, n_states=None, _self=cmd):
+    """Sanity-check which end of a loaded RFd3 trajectory is noise vs folded, and
+    (if `reverse` is given) whether that setting actually plays noise -> folded.
+
+    rfd3_movie() does NOT distinguish a `_noisy_model_` trajectory file from a
+    `_denoised_model_` one -- both load and render identically, and the filename
+    is only ever used to auto-derive the design JSON's path. This checks the
+    actual GEOMETRY instead of trusting the filename or a hardcoded assumption:
+    RFd3 noise is a collapsed blob near the origin (small radius), the folded
+    design is expanded (large radius) -- see docs/RFD3_FIGURES.md item 3. Measures
+    the CA radius-from-centroid of the diffusing chain (resn UNK) at state 1 vs
+    the last state, using literal state numbers (unaffected by any `reverse`
+    frame remapping already applied via mset).
+
+      reverse   pass the same value you used (or plan to use) for rfd3_movie's
+                `reverse=` -- prints whether it matches what this trajectory
+                actually needs, or is backwards.
+    Returns the reverse value (0 or 1) this trajectory needs for noise -> folded
+    playback, or None if inconclusive. USAGE: rfd3_check_frames <obj> [, reverse]
+    """
+    import math
+    ns = n_states or _self.count_states(obj)
+
+    def _radius(state):
+        m = _self.get_model("(%s) and resn UNK and name CA" % obj, state=state)
+        coords = [a.coord for a in m.atom]
+        if len(coords) < 3:
+            return None
+        n = len(coords)
+        cx = sum(c[0] for c in coords) / n
+        cy = sum(c[1] for c in coords) / n
+        cz = sum(c[2] for c in coords) / n
+        return max(math.sqrt((c[0] - cx) ** 2 + (c[1] - cy) ** 2 + (c[2] - cz) ** 2) for c in coords)
+
+    r1, rN = _radius(1), _radius(ns)
+    if r1 is None or rN is None:
+        print("rfd3_check_frames: no resn UNK CA atoms found on %s (wrong object, or not an RFd3 trajectory?)." % obj)
+        return None
+    print("rfd3_check_frames: state 1 radius %.1f A, state %d radius %.1f A." % (r1, ns, rN))
+    if abs(r1 - rN) < 2.0:
+        print("  Too close to call from the endpoints alone -- try comparing against a middle state, "
+              "or trust the design-JSON metadata instead.")
+        return None
+    if r1 < rN:
+        need_reverse = 0
+        print("  state 1 = NOISE (smaller/collapsed), state %d = FOLDED (larger/expanded)." % ns)
+    else:
+        need_reverse = 1
+        print("  state 1 = FOLDED (larger/expanded), state %d = NOISE (smaller/collapsed)." % ns)
+    print("  For noise -> folded playback: reverse=%d." % need_reverse)
+    if reverse is not None:
+        got = 1 if _rfd_bool(reverse) else 0
+        if got == need_reverse:
+            print("  reverse=%d matches -- frame 1 is noise, frame %d is folded. Good." % (got, ns))
+        else:
+            print("  MISMATCH: reverse=%d was used, but this trajectory needs reverse=%d for noise -> folded. "
+                  "Frames are currently playing backwards (folded -> noise)." % (got, need_reverse))
+    return need_reverse
+
+
 def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
                fixed_sidechain=0, reverse=0, fixed_json="", name="rfd3_traj", _self=cmd):
     """Set up an RFdiffusion3 diffusion movie from ONE trajectory .cif.gz.
@@ -1229,9 +1289,15 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
       cloud           : 1 = faint V-atom sidechain cloud on; 0 = CA spheres only.
       fixed_color     : color for the fixed-protein carbons (default 'orange').
       fixed_sidechain : 1 = show only the sidechains of fixed residues (hide backbone).
-      reverse         : 1 = play the trajectory in reverse (states N..1). The raw file
-                        loads state 1 = noise -> state N = folded, so the default
-                        (`reverse=0`) plays noise -> folded; flip if it looks backwards.
+      reverse         : 1 = play the trajectory in reverse (states N..1). On real
+                        trajectories seen so far, raw state 1 is the folded design and
+                        state N is noise -- backwards from what's intuitive -- so
+                        `reverse=1` is usually what you want for noise -> folded
+                        playback; this can vary by file (untested whether a
+                        `_denoised_model_` trajectory follows the same convention as
+                        `_noisy_model_`), so every call prints a direction check
+                        (see rfd3_check_frames() below) confirming whether your
+                        `reverse=` setting actually plays noise -> folded for THIS file.
       fixed_json      : optional path to the design JSON (else auto-derived).
     Fixed-atom detection uses `not resn UNK`; verified to equal the atoms that don't
     move across the trajectory. Uses `defer_builds_mode 3`; `set defer_builds_mode, 0`
@@ -1302,6 +1368,11 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
     _self.frame(1)
     print("rfd3_movie: %d states; %d fixed atoms (%s).%s Type `mplay` (noise -> folded)."
           % (ns, _self.count_atoms(fixed), fixed_color, _note))
+    # Auto direction-check: doesn't matter whether traj_file is a _noisy_model_
+    # or _denoised_model_ trajectory -- neither is treated specially above, so
+    # verify the actual geometry instead of trusting the filename or a hardcoded
+    # assumption. See rfd3_check_frames() and docs/RFD3_FIGURES.md item 3.
+    rfd3_check_frames(name, reverse=reverse, n_states=ns, _self=_self)
 
 
 def style_fixed(obj, glu_drop="N+CA+C+O+CB", his_drop="N+CA+C+O",
@@ -1525,6 +1596,7 @@ cmd.extend('gaussian_mode', gaussian_mode)
 cmd.extend('gaussian_off', gaussian_off)
 cmd.extend('gaussian_spin', gaussian_spin)
 cmd.extend('rfd3_movie', rfd3_movie)
+cmd.extend('rfd3_check_frames', rfd3_check_frames)
 cmd.extend('remove_clash_bonds', remove_clash_bonds)
 cmd.extend('restore_clash_bonds', restore_clash_bonds)
 cmd.extend('clash_bond_filter', clash_bond_filter)

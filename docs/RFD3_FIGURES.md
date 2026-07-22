@@ -22,6 +22,16 @@ silently grabs noise instead. Frame-based operations (`cmd.frame`, `cmd.png`,
 `cmd.orient` at the current frame) follow the `reverse` mapping and are fine
 as-is.
 
+**This has only been confirmed on `_noisy_model_` trajectory files.**
+`rfd3_movie()` does not special-case a `_denoised_model_` trajectory — it's
+loaded and rendered exactly the same way, and the filename is only ever used
+to auto-locate the design JSON — so don't assume the same state-1-is-folded
+convention holds for a denoised trajectory without checking. `rfd3_movie` now
+auto-runs `rfd3_check_frames(obj, reverse=...)` at the end of every call, which
+measures the actual per-state geometry (item 3) and prints whether your
+`reverse=` setting is correct for that specific file; call it by hand any time
+you want to re-verify.
+
 ## 2. Disconnected fragments ignore transparency
 
 RFd3 fixed-motif residues are frequently tiny, bond-less fragments (a lone
