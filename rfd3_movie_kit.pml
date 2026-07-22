@@ -16,8 +16,9 @@
 # See docs/RFD3_QUICKSTART.md in the repo for the short version of this, and
 # docs/RFD3_FIGURES.md for the full "why" behind every non-obvious line here.
 #
-# Commands this adds: rfd3_movie, style_fixed, apply_camera, draw_connectors,
-# catalytic_sel_from_motif, add_custom_bond, color_bb_rfdiffusion3.
+# Commands this adds: rfd3_movie, rfd3_check_frames, style_fixed, apply_camera,
+# draw_connectors, catalytic_sel_from_motif, add_custom_bond, remove_bond,
+# color_bb_rfdiffusion3.
 
 set_color RFd_darkblue, [75,95,170]
 set_color RFd_purple, [213,154,181]
@@ -57,22 +58,45 @@ def color_bb_rfdiffusion3(selection="chain A", all_atom=0, backbone_only=0, _sel
                    "%s and resi %d-%d" % (sel, mid + 1, hi))
 
 
-def style_fixed(obj, glu_drop="N+CA+C+O+CB", his_drop="N+CA+C+O",
-                 fixed_color="orange", stick_r=0.16, bb_stick_r=0.30,
-                 real_sphere=0.28, vplace_sphere=0.18, _self=cmd):
+def style_fixed(obj, trim_atoms=None, glu_drop="N+CA+C+O+CB", his_drop="N+CA+C+O",
+                 fixed_color="orange", color_map=None, lig_rep="sticks",
+                 stick_r=0.16, bb_stick_r=0.30, real_sphere=0.28, vplace_sphere=0.18,
+                 _self=cmd):
     """Solid ball-and-stick on a trajectory's fixed theozyme (motif residues + ligand
     + metals; everything not resn UNK). Fixes the "fixed atoms never look opaque"
     problem AT ITS ROOT: small disconnected motif fragments (no backbone/no bonds)
     fall back to the `nonbonded`/`lines` reps, which ignore sphere_transparency and
     stick_transparency entirely -- no amount of `set ..._transparency, 0` fixes that
     on its own. Fix: hide nonbonded+lines, rebuild sticks/spheres fresh, THEN force
-    transparency 0 last. Also trims the only fixed Glu/His that carry a real backbone
-    down to their reactive atoms (RFdiffusion3 motif sidechains are placeholder V0..V8
-    atoms, not standard PDB names -- backbone is the only thing safe to drop by name),
-    and grades stick/sphere size so real backbone atoms (bigger/fatter) read clearly
-    against the V-placeholder sidechain atoms (smaller/thinner). Works on the live
-    trajectory object AND on a single-state cmd.create() copy. USAGE: style_fixed
-    <obj>"""
+    transparency 0 last. Idempotent -- safe to call again any time you want to
+    restyle (different color_map/lig_rep/etc) without reloading the trajectory.
+    Works on the live trajectory object AND on a single-state cmd.create() copy.
+
+      trim_atoms   dict of {resn: atom_names} to trim any FULLY fixed residue (every
+                   sidechain atom fixed, not just CB) down to its reactive atoms only
+                   -- e.g. a fully-fixed Glu/His where only the carboxylate/imidazole
+                   should show, not the placeholder backbone too. Default:
+                   {"GLU": glu_drop, "HIS": his_drop} (the two seen so far); add your
+                   own {resn: "N+CA+C+O..."} entries for any other residue that needs
+                   it, or pass {} to disable trimming entirely. RFdiffusion3
+                   sidechains use generic V0-V8 placeholder names, so real backbone
+                   atom names are the only thing safe to drop by name.
+      glu_drop / his_drop  shorthand for the default GLU/HIS entries above; ignored
+                   if `trim_atoms` is given explicitly.
+      fixed_color  color for fixed-protein carbons not overridden by `color_map`.
+      color_map    optional dict of {key: color} applied AFTER fixed_color, for
+                   per-residue/selection overrides, e.g. {"HIS": "skyblue",
+                   "chain B and resi 45": "magenta"}. A key is used as a selection
+                   as-is if it looks like one (contains "and"/"or" or a keyword like
+                   chain/resi/resn/name/index), else treated as a bare `resn <key>`.
+      lig_rep      representation for the ligand -- 'sticks' (default), or 'lines'/
+                   'nb_spheres'/etc for a lighter look.
+    USAGE: style_fixed <obj>"""
+    if trim_atoms is None:
+        trim_atoms = {"GLU": glu_drop, "HIS": his_drop}
+    if color_map is None:
+        color_map = {}
+
     fx = "(%s) and not resn UNK" % obj
     lig = "(%s) and hetatm and not metals" % fx
     met = "(%s) and metals" % fx
@@ -85,15 +109,18 @@ def style_fixed(obj, glu_drop="N+CA+C+O+CB", his_drop="N+CA+C+O",
     _self.show("spheres", prot)
     _self.show("spheres", met)
 
-    for resn, drop in (("GLU", glu_drop), ("HIS", his_drop)):
+    for resn, drop in trim_atoms.items():
         extra = "(%s) and resn %s and name %s" % (fx, resn, drop)
         _self.hide("sticks", extra)
         _self.hide("spheres", extra)
 
+    if lig_rep != "sticks":
+        _self.hide("sticks", lig)
     _self.hide("lines", lig)
     _self.hide("nonbonded", lig)
-    _self.show("sticks", lig)
-    _self.set("stick_radius", 0.2, lig)
+    _self.show(lig_rep, lig)
+    if lig_rep == "sticks":
+        _self.set("stick_radius", 0.2, lig)
 
     _self.set("stick_radius", stick_r, prot)
     _self.set("stick_radius", bb_stick_r, "(%s) and name N+CA+C+O" % prot)
@@ -101,6 +128,10 @@ def style_fixed(obj, glu_drop="N+CA+C+O+CB", his_drop="N+CA+C+O",
     _self.set("sphere_scale", vplace_sphere, "(%s) and not name N+CA+C+O+CB" % prot)
 
     _self.color(fixed_color, "(%s) and elem C" % prot)
+    _kw = ("chain ", "resi ", "resn ", "name ", "index ", " and ", " or ")
+    for key, col in color_map.items():
+        sel = key if any(tok in key for tok in _kw) else ("resn %s" % key)
+        _self.color(col, "(%s) and (%s) and elem C" % (prot, sel))
 
     _self.set("stick_transparency", 0, fx)
     _self.set("sphere_transparency", 0, fx)
@@ -168,16 +199,18 @@ def rfd3_check_frames(obj, reverse=None, n_states=None, _self=cmd):
 
 
 def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
-               fixed_sidechain=0, reverse=0, fixed_json="", name="rfd3_traj", _self=cmd):
+               fixed_sidechain=0, reverse=0, fixed_json="", name="rfd3_traj",
+               ca_scale=0.4, cloud_scale=0.13, cloud_transparency=0.55,
+               bonds=None, unbonds=None, _self=cmd, **style_kwargs):
     """Set up an RFdiffusion3 diffusion movie from ONE trajectory .cif.gz.
 
     A `*_noisy_model_*.cif.gz` / `*_denoised_model_*.cif.gz` file is itself a
     100-state diffusion trajectory. Loads that ONE file. DIFFUSING residues (resn
     UNK) show as CA spheres + a faint V0-V8 sidechain cloud, colored by the
-    RFdiffusion3 gradient (`color_scheme=1`; 0 = plain cyan). FIXED atoms (the
-    catalytic motif + cofactor + metal) are auto-detected and held static, styled
-    solid ball-and-stick via style_fixed() with `fixed_color` (default orange) on
-    fixed-protein carbons. Then type `mplay`.
+    RFdiffusion3 gradient by default. FIXED atoms (the catalytic motif + cofactor +
+    metal) are auto-detected, held static, and styled via style_fixed() (see its
+    docstring for the full customization surface -- trim_atoms/color_map/lig_rep/
+    etc, all forwardable here as extra keyword args). Then type `mplay`.
 
     On real trajectories seen so far, raw state 1 is the folded design and state N
     is noise -- backwards from what's intuitive -- so `reverse=1` is usually what
@@ -191,13 +224,32 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
     (`..._model_N.json`) or given as `fixed_json=<path>` -- its `select_fixed_atoms`
     residue count is cross-checked against detection and any mismatch is warned.
 
-      color_scheme    : 1 = RFd3 gradient on the diffusing protein; 0 = plain cyan.
+      color_scheme    : 1/'rfd3' (default) = RFd3 gradient on the diffusing protein;
+                        0/'cyan' = flat cyan; or supply ANY PyMOL color name for a
+                        flat custom color (e.g. 'hotpink'), or a space-separated list
+                        of color names (e.g. 'marine yellow red') for a custom N-stop
+                        gradient N->C via cmd.spectrum -- same mechanism
+                        color_bb_rfdiffusion3 uses internally, just with your colors.
       cloud           : 1 = faint V-atom sidechain cloud on; 0 = CA spheres only.
-      fixed_color     : color for the fixed-protein carbons (default 'orange').
+      ca_scale        : sphere_scale of the diffusing chain's CA trace (default 0.4).
+      cloud_scale / cloud_transparency : size/transparency of the V-atom cloud
+                        (defaults 0.13 / 0.55).
+      fixed_color     : color for the fixed-protein carbons (default 'orange'); for
+                        finer per-residue control use `color_map` (see style_fixed).
       fixed_sidechain : 1 = show only the sidechains of fixed residues (hide backbone).
       reverse         : 1 = play the trajectory in reverse (states N..1). Verified
                         automatically every call -- see above.
       fixed_json      : optional path to the design JSON (else auto-derived).
+      bonds           : optional list of (sel_a, sel_b[, label]) tuples, forced
+                        immediately via add_custom_bond() -- e.g. a covalent
+                        TS-adduct PyMOL won't perceive on its own.
+      unbonds         : optional list of (sel_a, sel_b[, label]) tuples, removed
+                        immediately via remove_bond() -- e.g. a spurious bond PyMOL
+                        wrongly perceived.
+      **style_kwargs  : any other keyword (trim_atoms=, color_map=, lig_rep=,
+                        stick_r=, ...) is passed straight through to style_fixed().
+                        Call style_fixed() again by hand any time afterward to
+                        restyle the fixed theozyme without reloading the trajectory.
     Fixed-atom detection uses `not resn UNK`. Uses `defer_builds_mode 3`; never
     toggle representations per-frame on this object once loaded -- pull a single
     state out with cmd.create() first (see docs/RFD3_FIGURES.md #4). `set
@@ -214,21 +266,39 @@ def rfd3_movie(traj_file, color_scheme=1, cloud=1, fixed_color="orange",
     Vsel = "%s and name V0+V1+V2+V3+V4+V5+V6+V7+V8" % move
     _self.hide("everything", name)
     _self.show("spheres", "%s and name CA" % move)
-    _self.set("sphere_scale", 0.4, "%s and name CA" % move)
+    _self.set("sphere_scale", ca_scale, "%s and name CA" % move)
     if _rfd_bool(cloud):
         _self.show("spheres", Vsel)
-        _self.set("sphere_scale", 0.13, Vsel)
-        _self.set("sphere_transparency", 0.55, Vsel)
-    if _rfd_bool(color_scheme):
+        _self.set("sphere_scale", cloud_scale, Vsel)
+        _self.set("sphere_transparency", cloud_transparency, Vsel)
+    _scheme_tokens = ("1", "true", "on", "yes", "t", "y",
+                      "0", "false", "off", "no", "f", "n", "", "rfd3", "cyan")
+    _custom_scheme = (color_scheme.strip()
+                       if isinstance(color_scheme, str) and color_scheme.strip().lower() not in _scheme_tokens
+                       else None)
+    if _custom_scheme:
+        if " " in _custom_scheme:
+            _self.spectrum("resi", _custom_scheme, "%s and elem C" % move)
+            if _rfd_bool(cloud):
+                _self.spectrum("resi", _custom_scheme, Vsel)
+        else:
+            _self.color(_custom_scheme, "%s and elem C" % move)
+            if _rfd_bool(cloud):
+                _self.color(_custom_scheme, Vsel)
+    elif _rfd_bool(color_scheme) or (isinstance(color_scheme, str) and color_scheme.strip().lower() == "rfd3"):
         color_bb_rfdiffusion3(move, all_atom=1, _self=_self)
     else:
         _self.color("cyan", "%s and name CA" % move)
         if _rfd_bool(cloud):
             _self.color("grey70", Vsel)
-    style_fixed(name, fixed_color=fixed_color, _self=_self)
+    style_fixed(name, fixed_color=fixed_color, _self=_self, **style_kwargs)
     if _rfd_bool(fixed_sidechain):
         _prot = "(%s) and not hetatm" % fixed
         _self.hide("everything", "%s and backbone" % _prot)
+    for _item in (bonds or []):
+        add_custom_bond(_item[0], _item[1], label=(_item[2] if len(_item) > 2 else ""), _self=_self)
+    for _item in (unbonds or []):
+        remove_bond(_item[0], _item[1], label=(_item[2] if len(_item) > 2 else ""), _self=_self)
     _jp = _o.path.expanduser(fixed_json) if fixed_json else ""
     if not _jp:
         _b = _o.path.expanduser(str(traj_file))
@@ -280,6 +350,22 @@ def add_custom_bond(sel_a, sel_b, label="", _self=cmd):
     _self.bond(sel_a, sel_b)
     _self.show("sticks", "(%s) or (%s)" % (sel_a, sel_b))
     print("add_custom_bond [%s]: %.2f A." % (label, _self.get_distance(sel_a, sel_b)))
+    return True
+
+
+def remove_bond(sel_a, sel_b, label="", _self=cmd):
+    """Remove a bond PyMOL perceived that you don't want -- the mirror of
+    add_custom_bond() (e.g. clearing a spurious bond PyMOL guessed across a chain
+    break, clash, or metal coordination it shouldn't have drawn). Requires each
+    selection to resolve to exactly one atom. USAGE: remove_bond <sel_a>, <sel_b>
+    [, label]"""
+    na, nb = _self.count_atoms(sel_a), _self.count_atoms(sel_b)
+    if na != 1 or nb != 1:
+        print("remove_bond [%s]: SKIPPED, matched %d,%d atoms (need exactly 1,1)."
+              % (label, na, nb))
+        return False
+    _self.unbond(sel_a, sel_b)
+    print("remove_bond [%s]: bond removed." % label)
     return True
 
 
@@ -429,12 +515,13 @@ cmd.extend('style_fixed', style_fixed)
 cmd.extend('rfd3_movie', rfd3_movie)
 cmd.extend('rfd3_check_frames', rfd3_check_frames)
 cmd.extend('add_custom_bond', add_custom_bond)
+cmd.extend('remove_bond', remove_bond)
 cmd.extend('catalytic_sel_from_motif', catalytic_sel_from_motif)
 cmd.extend('apply_camera', apply_camera)
 cmd.extend('draw_connectors', draw_connectors)
 
-print("rfd3_movie_kit: loaded 8 commands (rfd3_movie, rfd3_check_frames, style_fixed, "
+print("rfd3_movie_kit: loaded 9 commands (rfd3_movie, rfd3_check_frames, style_fixed, "
       "apply_camera, draw_connectors, catalytic_sel_from_motif, add_custom_bond, "
-      "color_bb_rfdiffusion3).")
+      "remove_bond, color_bb_rfdiffusion3).")
 
 python end

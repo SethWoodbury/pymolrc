@@ -76,14 +76,33 @@ line rather than assuming `reverse=1` is always right.
 
 | Command | Description |
 |---|---|
-| `rfd3_movie <traj.cif.gz>` | Load one trajectory. Diffusing protein shows as CA spheres + a faint sidechain cloud in the RFd3 gradient; the fixed catalytic motif/cofactor/metal are auto-detected and held static, colored `fixed_color` (default orange) on fixed-protein carbons. Options: `reverse=1` (see above), `color_scheme=0` (plain cyan instead of gradient), `cloud=0` (CA spheres only, no sidechain cloud), `fixed_sidechain=1` (hide fixed backbone, sidechains only), `fixed_json=` (cross-check against the design JSON's `select_fixed_atoms`, else auto-derived from the trajectory filename). Then `mplay`. |
+| `rfd3_movie <traj.cif.gz>` | Load one trajectory. Diffusing protein shows as CA spheres + a faint sidechain cloud; the fixed catalytic motif/cofactor/metal are auto-detected, held static, and styled via `style_fixed`. Options: `reverse=1` (see above), `color_scheme=` (default RFd3 gradient; `0`/`'cyan'` for flat cyan; or **any PyMOL color name for a flat custom color**, e.g. `'hotpink'`; or **a space-separated list of colors for a custom multi-stop gradient**, e.g. `'marine yellow red'`), `cloud=0` (CA spheres only), `ca_scale=`/`cloud_scale=`/`cloud_transparency=` (size/transparency knobs), `fixed_sidechain=1`, `fixed_json=`, `bonds=[(sel_a, sel_b[, label]), ...]` / `unbonds=[(sel_a, sel_b[, label]), ...]` (force/remove bonds on load), and any other keyword (`trim_atoms=`, `color_map=`, `lig_rep=`, ...) passed straight through to `style_fixed`. Then `mplay`. |
 | `rfd3_check_frames <obj> [, reverse]` | Sanity-check which end of a loaded trajectory is noise vs folded, from the actual geometry (CA radius from centroid of the diffusing chain — noise is a collapsed blob, folded is expanded) rather than assumed from the filename. Runs automatically at the end of every `rfd3_movie` call; run it again by hand any time you want to double-check, e.g. after loading a file some other way, or on a `_denoised_model_` trajectory you're not sure follows the same convention. |
-| `style_fixed <obj>` | Solid, opaque ball-and-stick on the fixed theozyme. Fixes the classic "fixed atoms look see-through" problem at the root (disconnected motif fragments render as `nonbonded`/`lines`, which ignore transparency settings entirely — see `docs/RFD3_FIGURES.md` item 2) and sizes real backbone atoms bigger than the placeholder sidechain atoms so the two read clearly apart. |
-| `apply_camera <obj> [, mode] [, sel] [, span_states] [, n_states] [, turns]` | One entry point for camera control: `mode="orient"` (default, auto-frame), `mode="zoom"` (crop on `sel`), `mode="view"` (exact `get_view` matrix via `custom_view=`). `span_states=1, n_states=<n>` takes one fixed camera from the folded frame and holds it across the whole trajectory — needed because RFd3 noise is a *collapsed* blob, not an expanded one (the folded frame is the largest state and the one that can clip; see `docs/RFD3_FIGURES.md` item 3). |
+| `style_fixed <obj>` | Solid, opaque ball-and-stick on the fixed theozyme. Fixes the classic "fixed atoms look see-through" problem at the root (disconnected motif fragments render as `nonbonded`/`lines`, which ignore transparency settings entirely — see `docs/RFD3_FIGURES.md` item 2) and sizes real backbone atoms bigger than the placeholder sidechain atoms so the two read clearly apart. Configurable: `trim_atoms={resn: atom_names}` to trim any fully-fixed residue beyond the built-in GLU/HIS default (or `{}` to disable trimming), `color_map={key: color}` for per-residue/selection color overrides on top of `fixed_color`, `lig_rep='sticks'`/`'lines'`/etc for the ligand's representation. Idempotent — call it again any time with different args to restyle without reloading the trajectory. |
+| `apply_camera <obj> [, mode] [, sel] [, custom_view] [, span_states] [, n_states] [, turns]` | One entry point for camera control: `mode="orient"` (default, auto-frame), `mode="zoom"` (crop on `sel`), `mode="view"` (exact `get_view` matrix via `custom_view=`). `span_states=1, n_states=<n>` takes one fixed camera from the folded frame and holds it across the whole trajectory — needed because RFd3 noise is a *collapsed* blob, not an expanded one (the folded frame is the largest state and the one that can clip; see `docs/RFD3_FIGURES.md` item 3). |
 | `draw_connectors <obj> [, color] [, max_dist]` | Dashed lines from each fixed motif residue to its nearest scaffold Cα — a stand-in for "this theozyme residue sits here" when there's no covalent bond to draw. Only meaningful on a folded frame. |
 | `catalytic_sel_from_motif <clean_obj>, <motif_sel> [, max_match]` | If you also have a real, sequence-assigned output model of the design (not just the placeholder-sequence trajectory), identifies its catalytic residues by coordinate-matching them to the trajectory's fixed motif — far more precise than a distance cutoff off the ligand. Returns a selection string. |
 | `add_custom_bond <sel_a>, <sel_b> [, label]` | Force a bond PyMOL won't perceive on its own (e.g. a covalent TS-adduct). Each selection must resolve to exactly one atom; writes topology once, so it holds across every state. |
+| `remove_bond <sel_a>, <sel_b> [, label]` | Remove a bond PyMOL perceived that you don't want — the mirror of `add_custom_bond`, e.g. clearing a spurious clash bond. |
 | `color_bb_rfdiffusion3 [sel]` | The RFdiffusion3 gradient (pink → purple → teal → dark blue) N→C on any selection — what `rfd3_movie` uses internally, callable on its own too. |
+
+## Customizing
+
+Everything above is just PyMOL `show`/`hide`/`color`/`bond` under the hood, so
+nothing is locked in — you can always follow up with plain PyMOL commands on
+any selection after any of these run. A few configurable examples:
+
+```
+# custom flat color for the diffusing chain, custom ligand rep, per-residue
+# color override on the fixed theozyme, and a forced covalent bond:
+PyMOL> rfd3_movie ~/rfd3_example.cif.gz, reverse=1, color_scheme="hotpink", lig_rep="lines", color_map={"HIS": "skyblue"}, bonds=[("rfd3_traj and resi 75 and name NZ", "rfd3_traj and resn LIG and name C1", "TS-adduct")]
+
+# a custom 3-stop gradient instead of the default RFd3 palette:
+PyMOL> rfd3_movie ~/rfd3_example.cif.gz, reverse=1, color_scheme="marine yellow red"
+
+# restyle the fixed theozyme afterward without reloading anything:
+PyMOL> style_fixed rfd3_traj, trim_atoms={"ASP": "N+CA+C+O+CB"}, fixed_color="magenta"
+```
 
 ## Watch out for
 

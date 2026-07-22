@@ -170,3 +170,41 @@ numerically:
   selection for coloring/labeling.
 
 Cheap math beats a slow ray-trace of the wrong thing.
+
+## 11. Customization surface -- nothing here is locked in
+
+Every command in this kit is a thin wrapper over plain PyMOL `show`/`hide`/
+`color`/`bond`/`spectrum` calls on ordinary selections, so you always retain
+full manual override at the `PyMOL>` prompt after any of them run -- e.g.
+`hide sticks, rfd3_traj and resn LIG; show lines, rfd3_traj and resn LIG` works
+right now, no code changes needed. On top of that, the functions themselves
+expose the customization points that come up most:
+
+- **Diffusing-chain color**: `rfd3_movie`'s `color_scheme=` takes the default
+  RFd3 gradient (`1`/`'rfd3'`), flat cyan (`0`/`'cyan'`), any flat PyMOL color
+  name (`'hotpink'`), or a space-separated list of colors for a custom N-stop
+  gradient (`'marine yellow red'`) via the same `cmd.spectrum` mechanism
+  `color_bb_rfdiffusion3` uses internally.
+- **Fixed-theozyme color**: `fixed_color=` for a single flat color, or
+  `color_map={key: color}` (forwarded through `style_fixed`) for per-residue
+  or per-selection overrides applied on top.
+- **Representation**: `lig_rep=` on `style_fixed` (default `'sticks'`, or
+  `'lines'`/etc). The fixed protein itself stays ball-and-stick by design
+  (that's the whole point of `style_fixed`), but nothing stops a manual
+  `hide`/`show` afterward if you want something else.
+- **Which residues get trimmed**: `trim_atoms={resn: atom_names}` on
+  `style_fixed` generalizes the GLU/HIS-only trimming to any residue that
+  needs it (or pass `{}` to disable trimming entirely). See item 2 above for
+  why this trimming exists in the first place.
+- **Bonds**: `add_custom_bond`/`remove_bond` are the general-purpose pair for
+  forcing or clearing any bond PyMOL got wrong, and `rfd3_movie`'s
+  `bonds=`/`unbonds=` list arguments apply a batch of them immediately after
+  loading.
+- **Everything on `style_fixed` is idempotent** -- call it again by hand any
+  time with different arguments to restyle the fixed theozyme without
+  reloading the trajectory (`rfd3_movie` calling it once internally on load
+  is just a convenience, not a one-shot commitment).
+- Any keyword `rfd3_movie` doesn't recognize itself (`trim_atoms=`,
+  `color_map=`, `lig_rep=`, `stick_r=`, ...) is passed straight through to
+  `style_fixed` via `**kwargs`, so most single-call customization doesn't
+  need two separate commands.
