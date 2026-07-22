@@ -65,6 +65,15 @@ page for sharing with labmates. It covers grabbing just
 either `run`-ing it from your own `.pymolrc` or copy-pasting it in directly,
 plus a command reference and a quickstart example.
 
+**Use the `_noisy_model_*.cif.gz` trajectory, not the `_denoised_model_*.cif.gz`
+one, if you have a choice.** `rfd3_movie` loads and renders either one the same
+way, and both are supported — but the noise/folded frame-order convention
+(which drives the `reverse=` default) has only been verified against noisy
+trajectories. `rfd3_check_frames` runs automatically on every `rfd3_movie` call
+and prints a warning if `reverse=` looks wrong for whatever file you loaded, so
+a denoised trajectory will still work correctly — just double check that
+printed warning if you use one.
+
 `docs/RFD3_FIGURES.md` collects the hard-won principles behind building
 Figure-1-style stills and storyboard movies from an RFd3 trajectory on top of
 the commands above — frame vs. state indexing, why disconnected motif

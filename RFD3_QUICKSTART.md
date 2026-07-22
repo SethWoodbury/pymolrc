@@ -5,6 +5,11 @@ turn it into Figure-1-style stills or a looping GIF/MP4 — without adopting the
 rest of this repo's (foliage-green) color scheme. One file, no dependency on
 `.pymolrc`.
 
+**Use the `_noisy_model_*.cif.gz` trajectory if you have a choice** — that's
+what this kit was built and tested against. The `_denoised_model_*.cif.gz`
+trajectory also works, but hasn't been verified to follow the same
+noise/folded frame-order convention; see the note under Quickstart below.
+
 ## Install — pick one
 
 **Option A: download the one file, `run` it from your own `.pymolrc`**
