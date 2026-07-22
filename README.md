@@ -57,6 +57,13 @@ sidechains as they are.
 
 ## RFdiffusion3 trajectory figures
 
+**Just want the RFd3 movie/figure commands, not this whole foliage color
+scheme?** See **[`RFD3_QUICKSTART.md`](RFD3_QUICKSTART.md)** — a standalone
+page for sharing with labmates. It covers grabbing just
+[`rfd3_movie_kit.pml`](rfd3_movie_kit.pml) (one file, no other dependency) and
+either `run`-ing it from your own `.pymolrc` or copy-pasting it in directly,
+plus a command reference and a quickstart example.
+
 `docs/RFD3_FIGURES.md` collects the hard-won principles behind building
 Figure-1-style stills and storyboard movies from an RFd3 trajectory on top of
 the commands above — frame vs. state indexing, why disconnected motif
