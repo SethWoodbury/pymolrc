@@ -510,6 +510,34 @@ def draw_connectors(obj, color="grey50", max_dist=14.0, _self=cmd):
     return n
 
 
+def help_rfd3(_self=cmd):
+    """Command reference for this RFdiffusion3 movie/figure kit."""
+    print("""
+=== RFdiffusion3 movie / figure kit ===  (full write-up: docs/RFD3_FIGURES.md)
+
+rfd3_movie <traj.cif.gz> [, reverse=0] [, color_scheme=1] [, cloud=1]
+           [, fixed_sidechain=0] [, fixed_json=] [, ca_scale=0.4]
+           [, cloud_scale=0.13] [, cloud_transparency=0.55] [, bonds=] [, unbonds=]
+    MANDATORY: traj_file. Load ONE diffusion trajectory. Diffusing chain = CA
+    spheres + faint sidechain cloud; fixed motif/cofactor/metal auto-styled.
+    reverse=1 RECOMMENDED (frame 1 = noise, last = folded). color_scheme:
+    1/'rfd3' gradient, 0/'cyan' flat, any color name = flat, "c1 c2 c3" = custom
+    gradient. Extra kwargs (trim_atoms, color_map, lig_rep, ...) pass to style_fixed.
+rfd3_check_frames <obj> [, reverse] [, n_states]
+    Measure which end is noise vs folded from geometry (runs auto after rfd3_movie).
+style_fixed <obj> [, trim_atoms=] [, fixed_color=orange] [, color_map=] [, lig_rep=sticks]
+    MANDATORY: obj. Solid opaque ball-and-stick on the fixed theozyme. Idempotent.
+apply_camera <obj> [, mode=orient] [, sel=] [, custom_view=] [, span_states=] [, n_states=] [, turns=]
+    Camera control. span_states=1,n_states=N holds one folded-frame camera across a traj.
+draw_connectors <obj> [, color=grey50] [, max_dist=14.0]
+catalytic_sel_from_motif <clean_obj>, <motif_sel> [, max_match=4.0]
+add_custom_bond <sel_a>, <sel_b> [, label]   |   remove_bond <sel_a>, <sel_b> [, label]
+color_bb_rfdiffusion3 [sel]     RFd3 N->C gradient (pink->purple->teal->darkblue).
+
+Quickstart: RFD3_QUICKSTART.md   Examples: examples/
+""")
+
+
 cmd.extend('color_bb_rfdiffusion3', color_bb_rfdiffusion3)
 cmd.extend('style_fixed', style_fixed)
 cmd.extend('rfd3_movie', rfd3_movie)
@@ -519,9 +547,11 @@ cmd.extend('remove_bond', remove_bond)
 cmd.extend('catalytic_sel_from_motif', catalytic_sel_from_motif)
 cmd.extend('apply_camera', apply_camera)
 cmd.extend('draw_connectors', draw_connectors)
+cmd.extend('help_rfd3', help_rfd3)
+cmd.extend('help_rfd3_movie', help_rfd3)
 
-print("rfd3_movie_kit: loaded 9 commands (rfd3_movie, rfd3_check_frames, style_fixed, "
+print("rfd3_movie_kit: loaded 10 commands (rfd3_movie, rfd3_check_frames, style_fixed, "
       "apply_camera, draw_connectors, catalytic_sel_from_motif, add_custom_bond, "
-      "remove_bond, color_bb_rfdiffusion3).")
+      "remove_bond, color_bb_rfdiffusion3, help_rfd3).")
 
 python end

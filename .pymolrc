@@ -1714,3 +1714,82 @@ cmd.extend('draw_connectors', draw_connectors)
 bind_structure_navigation_keys(_self=cmd)
 
 python end
+
+# ============================================================================
+# Crystallography kit + repo-wide help  (help_crystal / help_rfd3 / pymolrc_help)
+# ============================================================================
+python
+import os as _os_ck
+
+# Load the crystallography kit (crystal_kit.pml): xtal / xtal_align /
+# xtal_density / xtal_rms / xtal_catres / xtal_focus / help_crystal. Look next to
+# this file, then in ~/pymolrc; run whichever copy is found so a clone works too.
+_CK_DIRS = []
+if "__file__" in globals():
+    _CK_DIRS.append(_os_ck.path.dirname(_os_ck.path.abspath(__file__)))
+_CK_DIRS.append(_os_ck.path.expanduser("~/pymolrc"))
+for _d in _CK_DIRS:
+    _ckp = _os_ck.path.join(_d, "crystallography", "crystal_kit.pml")
+    if _os_ck.path.exists(_ckp):
+        cmd.do("run " + _ckp)
+        break
+
+
+def help_rfd3(_self=cmd):
+    """Command reference for the RFdiffusion3 movie/figure kit."""
+    print("""
+=== RFdiffusion3 movie / figure kit ===  (full write-up: docs/RFD3_FIGURES.md)
+
+rfd3_movie <traj.cif.gz> [, reverse=0] [, color_scheme=1] [, cloud=1]
+           [, fixed_sidechain=0] [, fixed_json=] [, ca_scale=0.4]
+           [, cloud_scale=0.13] [, cloud_transparency=0.55] [, bonds=] [, unbonds=]
+    MANDATORY: traj_file. Load ONE diffusion trajectory. Diffusing chain = CA
+    spheres + faint sidechain cloud; fixed motif/cofactor/metal auto-styled.
+    reverse=1 RECOMMENDED (frame 1 = noise, last = folded). color_scheme:
+    1/'rfd3' gradient, 0/'cyan' flat, any color name = flat, "c1 c2 c3" = custom
+    gradient. Extra kwargs (trim_atoms, color_map, lig_rep, ...) pass to style_fixed.
+rfd3_check_frames <obj> [, reverse] [, n_states]
+    Measure which end is noise vs folded from geometry (runs auto after rfd3_movie).
+style_fixed <obj> [, trim_atoms=] [, fixed_color=orange] [, color_map=] [, lig_rep=sticks]
+    MANDATORY: obj. Solid opaque ball-and-stick on the fixed theozyme. Idempotent.
+apply_camera <obj> [, mode=orient] [, sel=] [, custom_view=] [, span_states=] [, n_states=] [, turns=]
+    Camera control. span_states=1,n_states=N holds one folded-frame camera across a traj.
+draw_connectors <obj> [, color=grey50] [, max_dist=14.0]
+catalytic_sel_from_motif <clean_obj>, <motif_sel> [, max_match=4.0]
+add_custom_bond <sel_a>, <sel_b> [, label]   |   remove_bond <sel_a>, <sel_b> [, label]
+color_bb_rfdiffusion3 [sel]     RFd3 N->C gradient (pink->purple->teal->darkblue).
+
+Quickstart: RFD3_QUICKSTART.md   Examples: examples/
+""")
+
+
+def pymolrc_help(_self=cmd):
+    """Top-level index of every command group in this pymolrc config."""
+    print("""
+=== pymolrc command groups ===  (repo: github.com/SethWoodbury/pymolrc)
+Type the group-help command for full per-command args (mandatory vs optional):
+
+  Crystallography (crystals + maps + alignment) ....... help_crystal
+  RFdiffusion3 movies / figures ....................... help_rfd3
+
+Crystallography : xtal  xtal_align  xtal_density  xtal_rms  xtal_catres  xtal_focus
+RFdiffusion3    : rfd3_movie  rfd3_check_frames  style_fixed  apply_camera
+                  draw_connectors  catalytic_sel_from_motif  add_custom_bond  remove_bond
+Look & color    : color_palette  autostyle  style_all  publication_ray_trace
+                  color_bb_rfdiffusion  color_bb_rfdiffusion3
+                  gaussian_mode  gaussian_off  gaussian_spin  bg_white  bg_black
+Align & arrange : align_all  center_all  autoalign  autosolo
+Select & inspect: seq  show_catres  only_catres  show_metals
+Browse many     : browse_list  browse_next  browse_prev  browse_step  browse_prestyle
+                  (arrow-key structure nav: structure_next/prev/step/show_all)
+Bond fixes      : add_custom_bond  remove_bond  clash_bond_filter  ligand_center_filter
+
+Full feature list + install/revert notes: README.md
+""")
+
+
+cmd.extend("help_rfd3", help_rfd3)
+cmd.extend("help_rfd3_movie", help_rfd3)
+cmd.extend("pymolrc_help", pymolrc_help)
+cmd.extend("help_pymolrc", pymolrc_help)
+python end

@@ -26,8 +26,15 @@ The bundled `show_termini.py` sits next to `.pymolrc` and loads automatically.
   `autosolo` loads extras hidden for near-instant startup on large sets.
 - **Structural align-all**, background toggle, one-line sequence dump, and residue-gradient
   coloring.
+- **Crystallography workup**: load a folder of refined crystals + their MTZ maps, split
+  every subunit, superpose all subunits (and a design model) onto each other, map
+  2Fo-Fc / Fo-Fc electron density that tracks the aligned atoms, print an RMSD summary,
+  and highlight `REMARK 666` catalytic residues — see [`crystallography/`](crystallography/).
 
 ## Commands
+
+**Not sure what's here?** Type `pymolrc_help` in PyMOL for an index of every command
+group, or `help_crystal` / `help_rfd3` for a specific kit's full argument reference.
 
 | Command | Description |
 |---|---|
@@ -52,6 +59,10 @@ The bundled `show_termini.py` sits next to `.pymolrc` and loads automatically.
 | `catalytic_sel_from_motif <clean_obj>, <motif_sel> [, max_match]` | identify a clean (real-sequence) model's catalytic residues by coordinate-matching them to a trajectory's fixed motif — precise even where a ligand-distance cutoff would over-select |
 | `add_custom_bond <sel_a>, <sel_b> [, label]` | force a bond PyMOL won't perceive on its own (e.g. a covalent TS-adduct); writes topology once, holds across every state |
 | `remove_bond <sel_a>, <sel_b> [, label]` | remove a bond PyMOL perceived that you don't want — the mirror of `add_custom_bond` |
+| `xtal <path> [, design=]` | crystallography everything-button: load crystals + sibling MTZ maps, split subunits, superpose all subunits (and the design) onto a reference, style, highlight `REMARK 666` catalytic residues, and (with `focus=active`) zoom to the pocket — see [`crystallography/`](crystallography/) |
+| `xtal_density <sel> [, level] [, carve] [, diff] [, dlevel]` | 2Fo-Fc mesh (blue) + Fo-Fc difference (green +/red −) around a subunit/selection; density tracks the aligned atoms. Tighter: raise `level` / lower `carve`; larger: the reverse |
+| `xtal_rms` · `xtal_align` · `xtal_catres` · `xtal_focus` | RMSD table (every subunit vs reference and vs design); re-superpose; highlight catalytic residues; zoom pocket vs all. `help_crystal` for full args |
+| `pymolrc_help` · `help_crystal` · `help_rfd3` | print a command index / a kit's full argument reference at the `PyMOL>` prompt |
 
 The `color_bb_*` commands default to `chain A` and recolor carbons only (non-carbon atoms
 left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep
@@ -89,11 +100,37 @@ runnable worked examples built on the bundled trajectory in `example_pdbs/`
 the pure-Python (no PyMOL) post-processing step they hand off to for
 GIF/MP4 assembly — usable standalone once you have rendered PNG frames.
 
+## Crystallography
+
+**Just want the crystal-structure commands?** See
+**[`crystallography/README.md`](crystallography/README.md)** — a standalone kit
+(one file, [`crystallography/crystal_kit.pml`](crystallography/crystal_kit.pml),
+no dependency on the rest of this repo) for loading refined crystals, splitting
+and superposing every subunit onto each other and onto a design model, mapping
+2Fo-Fc / Fo-Fc electron density onto the aligned atoms (tighter/larger with two
+knobs), printing an RMSD summary, and highlighting `REMARK 666` catalytic
+residues in magenta.
+
+`crystallography/example/` bundles a runnable demo — two real crystals of the
+same design (each with its refined `.mtz`) plus the design model. One command
+does the whole workup:
+
+```
+PyMOL> run ~/pymolrc/crystallography/crystal_kit.pml
+PyMOL> xtal ~/pymolrc/crystallography/example, design=~/pymolrc/crystallography/example/ZAPP_P1D1_design.pdb, focus=active
+PyMOL> xtal_rms
+PyMOL> xtal_density xtal_Pin5_A
+```
+
+(When this repo is cloned at `~/pymolrc`, the kit auto-loads at PyMOL startup —
+no `run` line needed; type `help_crystal` to confirm it's there.)
+
 ## Examples
 
 `example_pdbs/` holds sample structures to try the commands on:
 - `ZETA_1__A1_metalloesterase_theozyme.pdb` — a metalloesterase theozyme (Zn + His triad + substrate); good for `gaussian_mode` and `color_bb_*`.
 - `ZAPP_p1D1_i14_rfd3_noisy_trajectory.cif.gz` — an RFdiffusion3 diffusion trajectory for `rfd3_movie` and the `examples/` scripts above.
+- `crystallography/example/` — two refined crystals (+ MTZ) and a design model for the `xtal` crystallography commands.
 
 ## Reverting
 
