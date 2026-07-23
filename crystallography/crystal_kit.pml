@@ -26,13 +26,20 @@ import re as _cx_re
 # module-level registry populated by xtal()
 _CX = {"crystals": [], "subunits": [], "maps": {}, "design": None, "ref": None}
 
-# colors
-cmd.set_color("cx_green",  [120, 172, 115])   # design protein carbons (foliage)
-cmd.set_color("cx_amethyst", [168, 132, 194]) # design ligand carbons
-cmd.set_color("cx_catres", [230, 40, 200])    # magenta catalytic highlight
-cmd.set_color("elemZn", [109, 124, 142])      # metal blue-grey (matches pymolrc)
-_CX_XTAL_COLORS = ["cyan", "salmon", "paleyellow", "lightpink", "palegreen",
-                   "lightblue", "wheat", "aquamarine"]
+# colors (carbon identity per group; non-carbon atoms keep CPK element colors).
+# Palette: crystals = cool grey backbones + warm gold catalytic; design = foliage
+# green backbone + aqua-cyan catalytic + amethyst ligand. Warm-vs-cool separates the
+# crystal and design active sites when superposed; gold-vs-cyan is colorblind-safe.
+cmd.set_color("cx_green",      [120, 172, 115])  # design protein carbons (foliage)
+cmd.set_color("cx_amethyst",   [176, 126, 202])  # design ligand/cofactor carbons
+cmd.set_color("cx_cat_design", [ 90, 202, 214])  # design catalytic carbons (aqua-cyan)
+cmd.set_color("cx_cat_xtal",   [238, 210, 118])  # crystal catalytic carbons (goldenrod)
+cmd.set_color("cx_catres",     [230,  40, 200])  # legacy magenta (still selectable)
+cmd.set_color("elemZn",        [109, 124, 142])  # metal blue-grey (matches pymolrc)
+cmd.set_color("cx_grey1", [203, 206, 211])       # crystal backbone -- light
+cmd.set_color("cx_grey2", [157, 160, 166])       # crystal backbone -- mid
+cmd.set_color("cx_grey3", [119, 122, 129])       # crystal backbone -- deep
+_CX_XTAL_COLORS = ["cx_grey1", "cx_grey2", "cx_grey3"]
 
 # Stick / metal sizing consistent with the user's pymolrc so kit objects match the
 # rest of their look (normal-thickness sidechains, metal spheres at 0.7), rather
@@ -374,12 +381,15 @@ def _cx_rms_ca(a, b, _self):
         _self.delete(tmp)
 
 
-def xtal_catres(design="", color="cx_catres", rep="sticks", label=0, _self=cmd):
-    """Highlight the design's REMARK 666 catalytic residues in every crystal
-    subunit (and the design). Carbons -> `color`, heteroatoms stay CPK.
-      color : highlight color (default magenta cx_catres).
-      rep   : representation for the catalytic sidechains (default sticks).
-      label : 1 = add one-letter+resi labels.
+def xtal_catres(design="", color="cx_cat_xtal", design_color="cx_cat_design",
+                rep="sticks", label=0, _self=cmd):
+    """Highlight the REMARK 666 catalytic residues in every crystal subunit AND the
+    design -- but the design in its OWN color, so its active site reads apart from the
+    crystals' when they superpose. Carbons recolored; heteroatoms stay CPK.
+      color        : crystal catalytic carbons (default goldenrod cx_cat_xtal).
+      design_color : design catalytic carbons (default aqua-cyan cx_cat_design).
+      rep          : representation for the catalytic sidechains (default sticks).
+      label        : 1 = add one-letter+resi labels.
     """
     cats = _cx_remark666(design) if design else _CX.get("_cat666")
     if not cats:
@@ -391,14 +401,15 @@ def xtal_catres(design="", color="cx_catres", rep="sticks", label=0, _self=cmd):
         s = "%s and resi %s and not (metals or solvent)" % (o, resi_or)
         if _self.count_atoms(s) == 0:
             continue
+        col = design_color if o == _CX["design"] else color
         _self.show(rep, s)
-        _self.color(color, "%s and elem C" % s)
+        _self.color(col, "%s and elem C" % s)
         util.cnc(s)
         n += 1
         if _cx_bool(label):
             _self.label("%s and name CA" % s, '"%s%s" % (resn, resi)')
-    print("xtal_catres: highlighted residues %s in %d object(s) [color=%s]"
-          % (resi_or, n, color))
+    print("xtal_catres: highlighted residues %s in %d object(s) [crystals=%s, design=%s]"
+          % (resi_or, n, color, design_color))
 
 
 def _cx_active_sel():
@@ -466,8 +477,8 @@ xtal_density <sel> [, level=1.0] [, carve=1.8] [, diff=1] [, dlevel=3.0] [, surf
 xtal_rms [, reference=] [, design=]
     RMSD of every subunit vs reference and vs design, + per-crystal info.
 
-xtal_catres [, design=<path>] [, color=magenta] [, rep=sticks] [, label=0]
-    Highlight the design's REMARK 666 catalytic residues in the crystals.
+xtal_catres [, design=<path>] [, color=cx_cat_xtal] [, design_color=cx_cat_design] [, rep=sticks] [, label=0]
+    Highlight REMARK 666 catalytic residues: crystals gold, design cyan (distinct).
 
 help_crystal   — this text.
 """)

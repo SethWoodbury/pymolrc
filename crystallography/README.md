@@ -114,10 +114,18 @@ PyMOL> xtal_density xtal_Pin5_A and resi 89+92, carve=2.5  # just two residues, 
 
 Every command is a thin wrapper over ordinary PyMOL `load`/`create`/`super`/
 `isomesh`/`color` calls on plain selections, so you keep full manual override at
-the prompt afterward. The per-crystal color cycle
-(`cyan, salmon, paleyellow, ...`), the design colors (`cx_green`,
-`cx_amethyst`), and the catalytic highlight (`cx_catres`, magenta) are all
-`set_color`'d at the top of `crystal_kit.pml` and easy to change.
+the prompt afterward.
+
+**Default palette** (only carbons are recolored — every other element keeps its
+CPK color, so N/O/S/metals read normally): crystals get **grey** backbones
+(`cx_grey1/2/3`, cycled per crystal) with **goldenrod** catalytic carbons
+(`cx_cat_xtal`); the design keeps its **foliage-green** backbone (`cx_green`)
+with **aqua-cyan** catalytic carbons (`cx_cat_design`) and an **amethyst** ligand
+(`cx_amethyst`). Warm-gold vs cool-cyan is what separates the crystal and design
+active sites when they superpose (and it's colorblind-safe — it rides the
+blue-yellow axis). All of these are `set_color`'d at the top of
+`crystal_kit.pml`; override per call with e.g.
+`xtal_catres color=orange, design_color=magenta`.
 
 ## Notes
 
