@@ -30,8 +30,17 @@ _CX = {"crystals": [], "subunits": [], "maps": {}, "design": None, "ref": None}
 cmd.set_color("cx_green",  [120, 172, 115])   # design protein carbons (foliage)
 cmd.set_color("cx_amethyst", [168, 132, 194]) # design ligand carbons
 cmd.set_color("cx_catres", [230, 40, 200])    # magenta catalytic highlight
+cmd.set_color("elemZn", [109, 124, 142])      # metal blue-grey (matches pymolrc)
 _CX_XTAL_COLORS = ["cyan", "salmon", "paleyellow", "lightpink", "palegreen",
                    "lightblue", "wheat", "aquamarine"]
+
+# Stick / metal sizing consistent with the user's pymolrc so kit objects match the
+# rest of their look (normal-thickness sidechains, metal spheres at 0.7), rather
+# than the thinner kit-specific sizes used before. Metals inherit the global
+# sphere_scale exactly like `show_metals` in the pymolrc does.
+cmd.set("stick_radius", 0.25)
+cmd.set("sphere_scale", 0.7)
+cmd.set("valence", 0)
 
 
 def _cx_bool(v):
@@ -81,26 +90,58 @@ def _cx_super(mobile, target, _self=cmd):
 
 
 def _cx_style(_self=cmd):
-    """Default look: crystals colored per-crystal, design in foliage green+amethyst."""
+    """Default look: crystals colored per-crystal, design in foliage green+amethyst.
+    Stick/sphere sizes come from the global stick_radius (0.25) / sphere_scale (0.7)
+    set at kit load, so it matches the rest of the pymolrc look."""
     _self.hide("everything", "all")
     for i, cname in enumerate(_CX["crystals"]):
         col = _CX_XTAL_COLORS[i % len(_CX_XTAL_COLORS)]
         subs = [s for s in _CX["subunits"] if s.startswith(cname + "_")] or [cname]
         for s in subs:
-            _self.show("cartoon", s)
-            _self.show("sticks", "%s and (resn ZN or resn KCX) " % s)
-            _self.show("spheres", "%s and resn ZN" % s)
-            _self.set("sphere_scale", 0.35, "%s and resn ZN" % s)
-            _self.color(col, "%s and elem C" % s)
-            util.cnc("%s" % s)
+            _cx_style_object(s, col, _self)
     if _CX["design"]:
         d = _CX["design"]
         _self.show("cartoon", d)
-        _self.show("sticks", "%s and not polymer" % d)
+        _self.show("sticks", "%s and not polymer and not solvent" % d)
         _self.color("cx_green", "%s and polymer and elem C" % d)
         _self.color("cx_amethyst", "%s and not polymer and elem C" % d)
         util.cnc(d)
+        _self.color("elemZn", "%s and metals" % d)
     _self.set("cartoon_transparency", 0.0)
+
+
+def _cx_style_object(s, col, _self=cmd):
+    """Cartoon + ligand/hetero sticks + metal spheres on one object, in color `col`.
+    Sizes inherit the global stick_radius/sphere_scale (pymolrc-consistent)."""
+    _self.show("cartoon", s)
+    _self.show("sticks", "%s and not polymer and not solvent and not metals" % s)
+    _self.show("spheres", "%s and metals" % s)
+    _self.color(col, "%s and elem C" % s)
+    util.cnc("%s" % s)
+    _self.color("elemZn", "%s and metals" % s)
+
+
+def _cx_style_originals(_self=cmd):
+    """Keep each untouched, un-aligned original crystal as a toggle-able reference:
+    style it (per-crystal color, cartoon + ligand sticks + metal spheres) so it looks
+    right when shown, then DISABLE it so it stays out of view until the user enables
+    it, and move the originals to the top of the object panel."""
+    tops = []
+    for i, c in enumerate(_CX["crystals"]):
+        col = _CX_XTAL_COLORS[i % len(_CX_XTAL_COLORS)]
+        _cx_style_object(c, col, _self)
+        _self.disable(c)
+        tops.append(c)
+    if tops:
+        _self.order(" ".join(tops), location="top")
+
+
+def _cx_work_sel():
+    """The aligned working set (subunits + design), NOT the un-aligned originals — so
+    `zoom` frames the superposed cluster instead of the spread-out reference copies."""
+    base = _CX["subunits"] or _CX["crystals"]
+    work = list(base) + ([_CX["design"]] if _CX["design"] else [])
+    return ("(" + " or ".join(work) + ")") if work else "all"
 
 
 def xtal(path, design="", split=1, align=1, to_design=1, catres=1,
@@ -168,7 +209,8 @@ def xtal(path, design="", split=1, align=1, to_design=1, catres=1,
                        % (name, name, ch))
                 _self.create(sub, "byres ((%s and chain %s) or %s)" % (name, ch, het))
                 _CX["subunits"].append(sub)
-            _self.delete(name)   # keep only the subunit objects (map stays)
+            # keep the original, unsplit, un-aligned crystal as a reference object
+            # (styled + disabled below via _cx_style_originals) instead of deleting it.
     if design:
         _self.load(_cx_os.path.expanduser(design), "design")
         _CX["design"] = "design"
@@ -178,12 +220,15 @@ def xtal(path, design="", split=1, align=1, to_design=1, catres=1,
         xtal_align(to_design=to_design, _self=_self, quiet=1)
     if _cx_bool(catres) and _CX["design"] and _CX.get("_cat666"):
         xtal_catres(_self=_self)
+    if _CX["subunits"]:
+        # originals survive as disabled, top-of-panel reference objects
+        _cx_style_originals(_self)
     if not _cx_bool(surface_metals):
         _cx_hide_surface_metals(_self)
     if str(focus).lower() in ("active", "act", "site"):
         xtal_focus("active", _self=_self)
     else:
-        _self.zoom("all")
+        _self.zoom(_cx_work_sel())
     n_sub = len(_CX["subunits"]) or len(_CX["crystals"])
     print("xtal: loaded %d crystal(s), %d subunit(s), maps for %d, design=%s. "
           "Try: xtal_rms | xtal_density <subunit> | xtal_catres | help_crystal"
@@ -347,7 +392,6 @@ def xtal_catres(design="", color="cx_catres", rep="sticks", label=0, _self=cmd):
         if _self.count_atoms(s) == 0:
             continue
         _self.show(rep, s)
-        _self.set("stick_radius", 0.18, s)
         _self.color(color, "%s and elem C" % s)
         util.cnc(s)
         n += 1
@@ -370,11 +414,11 @@ def _cx_active_sel():
 
 
 def _cx_hide_surface_metals(_self=cmd):
-    """Hide metals that are not in the catalytic pocket (keep active-site Zn)."""
+    """Hide metals that are not in the catalytic pocket (keep active-site metals)."""
     act = _cx_active_sel()
     if not act:
         return
-    _self.hide("everything", "(resn ZN) and not ((resn ZN) within 6 of (%s))" % act)
+    _self.hide("everything", "(metals) and not ((metals) within 6 of (%s))" % act)
 
 
 def xtal_focus(target="active", _self=cmd):
@@ -389,7 +433,8 @@ def xtal_focus(target="active", _self=cmd):
         resi_or = "+".join(sorted(set(r for _, r in cats), key=lambda x: int(x)))
         _self.zoom("%s and resi %s and not (metals or solvent)" % (ref, resi_or), 4)
     elif t == "all":
-        _self.zoom("all")
+        # frame the aligned working set, not the un-aligned reference originals
+        _self.zoom(_cx_work_sel())
     else:
         _self.zoom(target, 5)
     print("xtal_focus: %s" % target)

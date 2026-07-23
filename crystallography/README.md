@@ -121,6 +121,15 @@ the prompt afterward. The per-crystal color cycle
 
 ## Notes
 
+- **The two original PDBs are kept as reference objects.** After splitting, each
+  crystal's full, unsplit, **un-aligned** structure stays loaded (`xtal_Pin5`,
+  `xtal_Pin16`) at the top of the object panel — but **disabled**, so it's out of
+  view until you tick it on. Handy for checking anything against the untouched
+  original in its own crystal coordinates. The `_A..D` subunits below it are the
+  aligned working copies.
+- **Stick and metal sizes follow your `.pymolrc`** (`stick_radius 0.25`,
+  `sphere_scale 0.7`, `valence off`, metals in the `elemZn` blue-grey) so kit
+  objects match the rest of your figures rather than looking thin.
 - **2Fo-Fc vs Fo-Fc** are the two field-standard maps; both come straight from
   the refined `.mtz` (PyMOL auto-generates `<map>.2fofc` and `<map>.fofc` on
   load). If a `.mtz` holds only unmerged data (no map coefficients), `xtal`
