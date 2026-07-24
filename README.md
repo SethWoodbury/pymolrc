@@ -38,7 +38,7 @@ group, or `help_crystal` / `help_rfd3` for a specific kit's full argument refere
 
 | Command | Description |
 |---|---|
-| `seq [sel]` | print the one-letter sequence of a selection |
+| `seq [sel-or-file]` | print the one-letter sequence of a selection/object, or a structure file path (`seq ~/x.pdb` loads it temporarily); prints usage on a bad input. Aliases: `sequence`, `get_seq`, `get_sequence` |
 | `show_metals [sel]` | show metals as spheres |
 | `show_catres [sel]` · `only_catres` | catalytic-residue sticks |
 | `style_all [sel]` | (re)apply the full style |

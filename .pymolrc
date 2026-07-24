@@ -604,35 +604,70 @@ def only_catres(_self=cmd):
         print('only_catres: no catalytic (REMARK 666) residues found.')
 
 
+def _seq_usage():
+    print("seq: usage -- seq <selection | object | /path/to/file.pdb>\n"
+          "  seq                       the mouse selection 'sele'\n"
+          "  seq design                an object\n"
+          "  seq chain A and resi 1-50 a sub-selection\n"
+          "  seq ~/models/foo.pdb      load a structure file, print its sequence\n"
+          "  aliases: sequence, get_seq, get_sequence")
+
+
 def seq(selection="sele", _self=cmd):
-    """Print the continuous single-line one-letter sequence of a selection
-    (whole residues). Default selection is the mouse selection `sele`.
-    USAGE: seq           |  seq chain A  |  seq myobj and resi 100-160"""
-    sel = selection
+    """Print the continuous single-line one-letter sequence (whole residues).
+    `selection` may be the mouse selection `sele` (default), an object/selection
+    string, OR a path to a structure file (.pdb/.cif/...), which is loaded
+    temporarily just to read its sequence and then removed.
+    USAGE: seq  |  seq design  |  seq chain A and resi 1-50  |  seq ~/x.pdb
+    Aliases: sequence, get_seq, get_sequence."""
+    import os as _o
+    _STRUCT_EXT = (".pdb", ".ent", ".cif", ".mmcif", ".mcif", ".pdb.gz",
+                   ".cif.gz", ".ent.gz", ".mmtf", ".mol", ".sdf")
+    sel = str(selection)
+    tmp = None
+    path = _o.path.expanduser(sel)
+    if _o.path.isfile(path):
+        # a real file on disk -> load into a temp object (no view change), read, drop
+        tmp = "_seq_file_tmp"
+        _self.delete(tmp)
+        try:
+            _self.load(path, tmp, zoom=0)
+        except Exception as e:
+            print('seq: could not load file "%s": %s' % (selection, e)); _seq_usage(); return ''
+        sel = tmp
+    else:
+        try:
+            n = _self.count_atoms('(%s)' % sel)
+        except Exception:
+            n = -1
+        if n <= 0:
+            if sel.lower().endswith(_STRUCT_EXT):
+                print('seq: file not found: "%s"' % selection)
+            elif n == 0:
+                print('seq: selection "%s" is empty (nothing picked?).' % selection)
+            else:
+                print('seq: bad selection "%s".' % selection)
+            _seq_usage(); return ''
     try:
-        if _self.count_atoms('(%s)' % sel) == 0:
-            print('seq: selection "%s" is empty (nothing picked?).' % sel)
-            return ''
-    except Exception:
-        print('seq: bad selection "%s".' % sel)
-        return ''
-    collected = []
-    _self.iterate('byres (%s) and name CA and polymer.protein' % sel,
-                  'collected.append((model, segi, chain, resv, resn))',
-                  space={'collected': collected})
-    if not collected:
-        print('seq: no protein residues (CA atoms) in "%s".' % sel)
-        return ''
-    seen = set(); ordered = []
-    for rec in collected:
-        k = rec[:4]
-        if k in seen:
-            continue
-        seen.add(k); ordered.append(rec)
-    s = ''.join(_AA3TO1.get(r[4], 'X') for r in ordered)
-    print(s)
-    print('seq: %d residues' % len(s))
-    return s
+        collected = []
+        _self.iterate('byres (%s) and name CA and polymer.protein' % sel,
+                      'collected.append((model, segi, chain, resv, resn))',
+                      space={'collected': collected})
+        if not collected:
+            print('seq: no protein residues (CA atoms) in "%s".' % selection); _seq_usage(); return ''
+        seen = set(); ordered = []
+        for rec in collected:
+            k = rec[:4]
+            if k in seen:
+                continue
+            seen.add(k); ordered.append(rec)
+        s = ''.join(_AA3TO1.get(r[4], 'X') for r in ordered)
+        print(s)
+        print('seq: %d residues' % len(s))
+        return s
+    finally:
+        if tmp is not None:
+            _self.delete(tmp)
 
 
 def bg_white(_self=cmd):
@@ -1692,6 +1727,9 @@ cmd.extend('show_metals', show_metals)
 cmd.extend('show_catres', show_catres)
 cmd.extend('only_catres', only_catres)
 cmd.extend('seq', seq)
+cmd.extend('sequence', seq)
+cmd.extend('get_seq', seq)
+cmd.extend('get_sequence', seq)
 cmd.extend('bg_white', bg_white)
 cmd.extend('bg_black', bg_black)
 cmd.extend('autostyle', autostyle)
