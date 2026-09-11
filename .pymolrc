@@ -105,6 +105,60 @@ set_color good_red, [228,74,62]
 set_color ipd_blue, [65,150,181]
 set_color ipd_purple, [180,31,133]
 
+# --- Brand colors (manual use; digital HEX values, checked 2026-09-10) ---
+
+# NVIDIA
+# Sources: https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/NVIDIA-Trademark-and-Logo-Usage-Guidelines.pdf
+# Black: https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/NVIDIA-Brand-Guidelines-for-NVIDIA-Partner-Network-v03-3-5-19.pdf
+set_color nvidia_green, [118,185,0]  # 76B900
+set_color nvidia_black, [0,0,0]  # 000000
+set_color nvidia_dark_gray, [30,30,30]  # 1E1E1E
+set_color nvidia_white, [255,255,255]  # FFFFFF
+
+# Institute for Protein Design
+# RGB sampled from the solid fills of the current official IPD logo:
+# https://www.ipd.uw.edu/wp-content/uploads/2025/03/IPD-logo-UW-color-2025.png
+# Existing ipd_blue / ipd_purple above retain their legacy values.
+set_color ipd_logo_blue, [77,151,183]  # 4D97B7
+set_color ipd_logo_magenta, [177,17,134]  # B11186
+set_color ipd_uw_purple, [75,46,131]  # 4B2E83
+
+# University of Washington
+# https://www.washington.edu/brand/brand-elements/colors/
+# Use published HEX values (some RGB labels on the page disagree).
+# uw_purple / uw_gold alias Husky Purple / Husky Gold.
+set_color uw_purple, [50,0,110]  # 32006E
+set_color uw_husky_purple, [50,0,110]  # 32006E
+set_color uw_spirit_purple, [75,46,131]  # 4B2E83
+set_color uw_gold, [183,165,122]  # B7A57A
+set_color uw_husky_gold, [183,165,122]  # B7A57A
+set_color uw_web_gold, [232,227,211]  # E8E3D3
+set_color uw_heritage_gold, [133,117,77]  # 85754D
+set_color uw_spirit_gold, [255,199,0]  # FFC700
+set_color uw_accent_green, [170,219,30]  # AADB1E
+set_color uw_accent_teal, [42,210,201]  # 2AD2C9
+set_color uw_accent_pink, [233,60,172]  # E93CAC
+set_color uw_accent_lavender, [197,180,227]  # C5B4E3
+
+# University of Michigan
+# https://brand.umich.edu/design-resources/colors/
+set_color umich_maize, [255,203,5]  # FFCB05
+set_color umich_blue, [0,39,76]  # 00274C
+set_color umich_tappan_red, [154,51,36]  # 9A3324
+set_color umich_ross_orange, [216,96,24]  # D86018
+set_color umich_rackham_green, [117,152,141]  # 75988D
+set_color umich_wave_field_green, [165,165,8]  # A5A508
+set_color umich_taubman_teal, [0,178,169]  # 00B2A9
+set_color umich_arboretum_blue, [47,101,167]  # 2F65A7
+set_color umich_a2_amethyst, [112,32,130]  # 702082
+set_color umich_matthaei_violet, [87,82,148]  # 575294
+set_color umich_peony_pink, [224,31,124]  # E01F7C
+set_color umich_umma_tan, [207,192,150]  # CFC096
+set_color umich_burton_tower_beige, [155,154,109]  # 9B9A6D
+set_color umich_angell_hall_ash, [152,156,151]  # 989C97
+set_color umich_law_quad_stone, [101,90,82]  # 655A52
+set_color umich_puma_black, [19,21,22]  # 131516
+
 # --- Seaborn palette ---
 set_color sblightgreen, [153,204,153]
 set_color sblightpurple, [204,153,204]
