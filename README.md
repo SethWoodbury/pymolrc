@@ -63,6 +63,9 @@ group, or `help_crystal` / `help_rfd3` for a specific kit's full argument refere
 | `xtal_density <sel> [, level] [, carve] [, diff] [, dlevel]` | 2Fo-Fc mesh (blue) + Fo-Fc difference (green +/red −) around a subunit/selection; density tracks the aligned atoms. Tighter: raise `level` / lower `carve`; larger: the reverse |
 | `xtal_rms` · `xtal_align` · `xtal_catres` · `xtal_focus` | RMSD table (every subunit vs reference and vs design); re-superpose; highlight catalytic residues; zoom pocket vs all. `help_crystal` for full args |
 | `pymolrc_help` · `help_crystal` · `help_rfd3` | print a command index / a kit's full argument reference at the `PyMOL>` prompt |
+| `rfd4_load <annotated.cif>, <object>` | load physical atoms and native bonds from a verified persistent display cache; use the installed RFD4 parser once on a cache miss |
+| `rfd4_style <object>, <mode>` · `rfd4_info <object>` · `help_rfd4` | switch condition colors or inspect annotations; see [RFD4_QUICKSTART.md](RFD4_QUICKSTART.md) |
+| `rfd4_cache_info` | show disk/memory cache hits, native parses, and last reader timing |
 
 The `color_bb_*` commands default to `chain A` and recolor carbons only (non-carbon atoms
 left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep

@@ -606,18 +606,24 @@ def _color_foliage(obj, _self=cmd):
     """Per-object foliage coloring (single mid-palette green) + amethyst ligand + element
     colors + ligand sticks. Matches color_palette's LOOK without its heavy passes. Uses
     ONE green (not cycling) — you browse one structure at a time, so cycling is invisible
-    here; color_palette keeps cycling for multi-object overlays."""
-    _self.color('sc05', obj)
+    here; color_palette keeps cycling for multi-object overlays.
+    Also shows metal spheres. Every selection-based command scans EVERY atom in the
+    session, so load time grew with session size; this uses 3 scans per object (was 12)
+    and the ligand/metal passes only run when the object has non-polymer atoms."""
+    # Base green + element colors in ONE pass (per-atom work only on this object).
+    colors = {e: _self.get_color_index(c) for e, c in _FOLIAGE_ELEM_COLORS.items()}
+    _self.alter(obj, 'color = _c.get(elem.upper(), _d)',
+                space={'_c': colors, '_d': _self.get_color_index('sc05')})
     _self.color('bb05', '%s and polymer.protein and elem C and backbone' % obj)
-    _self.color('sc05', '%s and polymer.protein and elem C and not backbone' % obj)
     _self.unset('cartoon_color', obj)
-    _self.color('elemN', '%s and elem N' % obj)
-    _self.color('elemO', '%s and elem O' % obj)
-    _self.color('elemS', '%s and elem S' % obj)
-    _self.color('elemP', '%s and elem P' % obj)
-    _self.color('elemH', '%s and elem H' % obj)
-    _self.color('lig_amethyst3', '%s and organic and elem C' % obj)
-    _self.show('sticks', '%s and organic and not (%s) and not hydro' % (obj, _METAL_SEL))
+    if _self.select('_pymolrc_np', '%s and not polymer' % obj, enable=0):
+        _self.color('lig_amethyst3', '_pymolrc_np and organic and elem C')
+        _self.show('sticks', '_pymolrc_np and organic and not (%s) and not hydro' % _METAL_SEL)
+        show_metals('_pymolrc_np', _self=_self)
+    _self.delete('_pymolrc_np')
+
+
+_FOLIAGE_ELEM_COLORS = {'N': 'elemN', 'O': 'elemO', 'S': 'elemS', 'P': 'elemP', 'H': 'elemH'}
 
 
 def _style_one(obj, _self=cmd):
@@ -625,7 +631,6 @@ def _style_one(obj, _self=cmd):
     catalytic sticks. Records the object as styled. (Alignment / clash-removal /
     ligand-shell remain the explicit `color_palette` / `align_all`.)"""
     _color_foliage(obj, _self=_self)
-    show_metals(obj, _self=_self)
     _color_catres(obj, _self=_self)
     _STYLED.add(obj)
 
@@ -1863,6 +1868,7 @@ Type the group-help command for full per-command args (mandatory vs optional):
 
   Crystallography (crystals + maps + alignment) ....... help_crystal
   RFdiffusion3 movies / figures ....................... help_rfd3
+  RFdiffusion4 annotated CIFs ......................... help_rfd4
 
 Crystallography : xtal  xtal_align  xtal_density  xtal_rms  xtal_catres  xtal_focus
 RFdiffusion3    : rfd3_movie  rfd3_check_frames  style_fixed  apply_camera
@@ -1884,4 +1890,13 @@ cmd.extend("help_rfd3", help_rfd3)
 cmd.extend("help_rfd3_movie", help_rfd3)
 cmd.extend("pymolrc_help", pymolrc_help)
 cmd.extend("help_pymolrc", pymolrc_help)
+python end
+
+# Automatic RFdiffusion4 annotated-CIF loading: CLI/load/browse_list.
+# Read-only native CPU parser with a persistent display cache.
+python
+import os as _os_rfd4
+_rfd4_viewer = _os_rfd4.path.expanduser("~/pymolrc/rfd4_viewer.py")
+if _os_rfd4.path.isfile(_rfd4_viewer):
+    cmd.run(_rfd4_viewer)
 python end
