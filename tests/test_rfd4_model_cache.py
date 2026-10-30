@@ -16,11 +16,13 @@ import rfd4_model_cache as cache
 def model():
     atom = {"chain": "A", "resi": "204", "resn": "ALA", "name": "N", "element": "N",
             "coord": [1.0, 2.0, 3.0], "hetero": False, "occupancy": 1.0, "charge": 0,
-            "fixed": True, "sequence_fixed": False, "unindexed": True, "index_group": 3,
+            "fixed": True, "internal": False, "coordinate_group": 0,
+            "sequence_fixed": False, "unindexed": True, "index_group": 3,
             "hbond": "DONOR", "rasa": "UNSPECIFIED"}
     second = {**atom, "name": "CA", "element": "C", "coord": [2.3, 2.0, 3.0], "hbond": "NONE"}
     return {"source": "/old/name.cif", "atoms": [atom, second], "bonds": [[0, 1, 1]],
             "excluded_atoms": 1, "segments": [{"chain": "A", "resi": 1, "min": 120, "max": 260}],
+            "centroids": [{"chain": "A", "xyz": [0.0, 0.0, 0.0]}],
             "condition_fields": ["condition_coordinate"], "parse": "test-native",
             "present": {name: True for name in ("fixed", "sequence_fixed", "unindexed", "hbond", "rasa")}}
 
@@ -74,6 +76,32 @@ class CacheTests(unittest.TestCase):
         path.write_bytes(cache.canonical(envelope))
         self.assertIsNone(self.read())
 
+    def test_old_schema_and_missing_centroids_are_cache_misses(self):
+        path = self.write()
+        envelope = json.loads(path.read_bytes())
+        envelope['schema'] = cache.SCHEMA - 1
+        path.write_bytes(cache.canonical(envelope))
+        self.assertIsNone(self.read())
+        path = self.write()
+        envelope = json.loads(path.read_bytes())
+        del envelope['model']['centroids']
+        envelope['model_sha256'] = cache.sha256(cache.canonical(envelope['model']))
+        path.write_bytes(cache.canonical(envelope))
+        self.assertIsNone(self.read())
+
+    def test_centroid_payload_validation(self):
+        for centroids in (None, [{'chain': 'A', 'xyz': [0, 0]}],
+                          [{'chain': 'A', 'xyz': [0, 0, float('nan')]}],
+                          [{'chain': 'A', 'xyz': [0, False, 0]}],
+                          [{'chain': 'A', 'xyz': [0, 0, 0]}] * 2):
+            with self.subTest(centroids=centroids), self.assertRaises(ValueError):
+                value = model(); value['centroids'] = centroids
+                cache.validate_model(value)
+        for centroids in ([], [{'chain': 'placeholder_only', 'xyz': [0, 0, 0]}]):
+            value = model(); value['centroids'] = centroids
+            self.write(value)
+            self.assertEqual(self.read()['centroids'], centroids)
+
     def test_rejects_nonfinite_coordinate_and_bad_identity(self):
         broken = model()
         broken["atoms"][0]["coord"][0] = float("nan")
@@ -88,11 +116,25 @@ class CacheTests(unittest.TestCase):
         dirty = model()
         dirty["atoms"][0]["pymol_index"] = 900
         dirty["selections_created"] = True
+        dirty["centroid_indices"] = [901]
+        dirty["show_centroids"] = True
         self.write(dirty)
         clean = self.read()
         self.assertNotIn("pymol_index", clean["atoms"][0])
         self.assertNotIn("selections_created", clean)
+        self.assertNotIn("centroid_indices", clean)
+        self.assertNotIn("show_centroids", clean)
         self.assertEqual(900, dirty["atoms"][0]["pymol_index"])
+
+    def test_coordinate_groups_distinguish_absolute_internal_and_reference(self):
+        value = model()
+        value['atoms'][0].update(fixed=False, internal=True, coordinate_group=7)
+        value['atoms'][1].update(fixed=False, internal=False, coordinate_group=-1, sequence_fixed=True)
+        self.write(value)
+        self.assertEqual(value['atoms'], self.read()['atoms'])
+        value['atoms'][1]['fixed'] = True
+        with self.assertRaisesRegex(ValueError, 'membership'):
+            self.write(value)
 
     def test_atomic_json_never_leaves_pending_files(self):
         path = self.write()

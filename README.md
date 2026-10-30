@@ -13,13 +13,21 @@ cp .pymolrc ~/.pymolrc        # back up any existing ~/.pymolrc first
 ```
 
 The bundled `show_termini.py` sits next to `.pymolrc` and loads automatically.
+Keep the repository's helper files together for RFD4 viewing. Its lightweight
+reader needs NumPy and Biopython in the Python environment used by PyMOL; an
+installed RFD4 environment is needed only for the native fallback. See
+[RFD4_QUICKSTART.md](RFD4_QUICKSTART.md) for dependencies and runtime overrides.
 
 ## Features
 
 - **Foliage color scheme**, applied per object on load: greens for protein, amethyst
   ligands, soft element colors, black background.
 - **Metals as spheres**, detected by element, residue name, or atom name — including
-  metals buried inside a ligand residue.
+  metals buried inside a ligand residue. Showing sticks/lines also shows spheres
+  for selected metals, so a review PML's `hide everything` followed by `show sticks`
+  cannot leave isolated ions invisible. This applies to `show` and `as`, preserves
+  colors and sphere sizes, and respects explicit `hide`/`disable` commands.
+  `autostyle off` disables this automatic addition; `show_metals` still works.
 - **Catalytic residues** highlighted from `REMARK 666` (sidechain sticks; whole residue
   for PRO/GLY).
 - **Fast batch browsing**: load a glob of designs and page through them with pgup/pgdn.
@@ -63,9 +71,10 @@ group, or `help_crystal` / `help_rfd3` for a specific kit's full argument refere
 | `xtal_density <sel> [, level] [, carve] [, diff] [, dlevel]` | 2Fo-Fc mesh (blue) + Fo-Fc difference (green +/red −) around a subunit/selection; density tracks the aligned atoms. Tighter: raise `level` / lower `carve`; larger: the reverse |
 | `xtal_rms` · `xtal_align` · `xtal_catres` · `xtal_focus` | RMSD table (every subunit vs reference and vs design); re-superpose; highlight catalytic residues; zoom pocket vs all. `help_crystal` for full args |
 | `pymolrc_help` · `help_crystal` · `help_rfd3` | print a command index / a kit's full argument reference at the `PyMOL>` prompt |
-| `rfd4_load <annotated.cif>, <object>` | load physical atoms and native bonds from a verified persistent display cache; use the installed RFD4 parser once on a cache miss |
+| `rfd4_load <annotated.cif>, <object>` | show coordinate targets as sticks/spheres, reference atoms as lines, and annotated chain centroids; lightweight reader with native parser/cache fallback |
 | `rfd4_style <object>, <mode>` · `rfd4_info <object>` · `help_rfd4` | switch condition colors or inspect annotations; see [RFD4_QUICKSTART.md](RFD4_QUICKSTART.md) |
-| `rfd4_cache_info` | show disk/memory cache hits, native parses, and last reader timing |
+| `rfd4_centroids <object>, 0` / `rfd4_centroids <object>, 1` | hide/show annotated centroid targets; the choice survives subsequent style calls |
+| `rfd4_cache_info` | show lightweight reads, disk/memory cache hits, native parses, and last reader timing |
 
 The `color_bb_*` commands default to `chain A` and recolor carbons only (non-carbon atoms
 left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep

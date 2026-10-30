@@ -419,7 +419,7 @@ def structure_step(step=1, selection="all", _self=cmd):
                 break
     _AF3_STRUCTURE_NAV_INDEX = (_AF3_STRUCTURE_NAV_INDEX + int(step)) % len(objects)
     target = objects[_AF3_STRUCTURE_NAV_INDEX]
-    if _AUTOSTYLE and target not in _STYLED:
+    if _AUTOSTYLE and target not in _STYLED and target in _KNOWN_OBJS:
         _style_one(target, _self=_self)   # lazy styling: style on first view (fast browsing)
     _self.disable('all')
     _self.enable(target)
@@ -439,7 +439,7 @@ def structure_prev(selection="all", _self=cmd):
 def structure_show_all(selection="all", _self=cmd):
     if _AUTOSTYLE:
         for obj in _self.get_object_list(selection):
-            if obj not in _STYLED:
+            if obj not in _STYLED and obj in _KNOWN_OBJS:
                 _style_one(obj, _self=_self)
     _self.enable(selection)
     print('structure_show_all: enabled all objects.')
@@ -519,6 +519,49 @@ def show_metals(selection="all", _self=cmd):
     _self.color('elemZn', sel)
 
 
+# PMLs often hide everything after load and then show sticks/lines. Isolated
+# ions have no bonds to draw, so restore their spheres when that representation
+# is requested. Do not wrap hide/disable or change colors, coordinates or bonds.
+# Keep original functions on cmd so reloading this section cannot nest hooks.
+if not hasattr(cmd, '_pymolrc_metal_show_state'):
+    cmd._pymolrc_metal_show_state = {'show': cmd.show, 'show_as': cmd.show_as}
+_METAL_SHOW_STATE = cmd._pymolrc_metal_show_state
+
+
+def _pymolrc_add_metal_spheres(representation, selection, _self=cmd):
+    if not _AUTOSTYLE:
+        return
+    from pymol import selector, viewing
+    # Match PyMOL's one-argument selection shorthand and native abbreviations.
+    if not selection and (representation in ('', 'all') or
+                          '(' in representation or '/' in representation):
+        selection, representation = representation, 'wire'
+    repmask = viewing._rep_to_repmask(representation)
+    if not repmask & (viewing.repmasks['sticks'] | viewing.repmasks['lines'] |
+                      viewing.repmasks['nonbonded'] | viewing.repmasks['nb_spheres']):
+        return
+    selected = selector.process(selection) or 'all'
+    _METAL_SHOW_STATE['show']('spheres', '(%s) and (%s)' % (selected, _METAL_SEL), _self=_self)
+
+
+def _pymolrc_show_hook(representation='wire', selection='', *, _self=cmd):
+    result = _METAL_SHOW_STATE['show'](representation, selection, _self=_self)
+    _pymolrc_add_metal_spheres(representation, selection, _self=_self)
+    return result
+
+
+def _pymolrc_show_as_hook(representation='wire', selection='', *, _self=cmd):
+    result = _METAL_SHOW_STATE['show_as'](representation, selection, _self=_self)
+    _pymolrc_add_metal_spheres(representation, selection, _self=_self)
+    return result
+
+
+cmd.show = _pymolrc_show_hook
+cmd.show_as = _pymolrc_show_as_hook
+cmd.keyword['show'][0] = cmd.show
+cmd.keyword['as'][0] = cmd.show_as
+
+
 _REMARK666_CACHE = {}   # path -> ((mtime, size), [(chain, resi), ...]); skips re-reading on reload
 
 
@@ -529,6 +572,10 @@ def _parse_remark666(path):
     Cached by (mtime, size) so re-loading the same files (random_shuffle re-runs) is a stat,
     not a re-read of every header (matters on NFS)."""
     res = []
+    # REMARK 666 is a PDB record, never CIF/PSE metadata. Avoid scanning entire
+    # structures or binary sessions for it on every first load.
+    if isinstance(path, str) and path.lower().removesuffix('.gz').endswith(('.cif', '.mmcif', '.pse', '.psw', '.pze')):
+        return res
     if not path or not isinstance(path, str) or not os.path.isfile(path):
         return res
     key = None
@@ -630,6 +677,9 @@ def _style_one(obj, _self=cmd):
     """Full cheap per-object look: foliage colors + ligand sticks + metal spheres +
     catalytic sticks. Records the object as styled. (Alignment / clash-removal /
     ligand-shell remain the explicit `color_palette` / `align_all`.)"""
+    if obj in getattr(_self, '_rfd4_viewer_state', {}).get('objects', {}):
+        _STYLED.add(obj)
+        return
     _color_foliage(obj, _self=_self)
     _color_catres(obj, _self=_self)
     _STYLED.add(obj)
@@ -897,16 +947,21 @@ def style_all(selection="all", _self=cmd):
     Single foliage green here (you browse one at a time; color_palette keeps cycling greens
     for multi-object overlays). USAGE: style_all [sel]"""
     objs = _self.get_object_list() if selection in ('all', '(all)', '*') else _self.get_object_list(selection)
+    annotated = getattr(_self, '_rfd4_viewer_state', {}).get('objects', {})
+    protected = [obj for obj in objs if obj in annotated]
+    objs = [obj for obj in objs if obj not in annotated]
     if not objs:
-        print('style_all: no objects.')
+        print('style_all: annotated condition styles preserved.' if protected else 'style_all: no objects.')
         return
     s = selection
+    if protected:
+        s = '(%s) and not (%s)' % (selection, ' or '.join('model ' + obj for obj in protected))
     _self.set('suspend_updates', 1)
     try:
         _self.color('sc05', '(%s) and polymer.protein' % s)                        # foliage base
         _self.color('bb05', '(%s) and polymer.protein and elem C and backbone' % s)
         _self.color('sc05', '(%s) and polymer.protein and elem C and not backbone' % s)
-        _self.unset('cartoon_color')                                               # cartoon follows CA color (unpinned)
+        _self.unset('cartoon_color', s)                                            # cartoon follows CA color (unpinned)
         _self.color('elemN', '(%s) and elem N' % s)                                # elements + ligand
         _self.color('elemO', '(%s) and elem O' % s)
         _self.color('elemS', '(%s) and elem S' % s)
@@ -1028,23 +1083,42 @@ def _pymolrc_autostyle_new(filename, new_objs, ref=None, _self=cmd):
                 pass
         if not _AUTOSTYLE:
             continue
+        if obj in getattr(_self, '_rfd4_viewer_state', {}).get('objects', {}):
+            # The annotated loader owns its condition colors/representations.
+            # Treat it as styled so navigation cannot repaint the conditions.
+            _STYLED.add(obj)
+            if _AUTOSOLO and ref and obj != ref:
+                _self.disable(obj)
+            continue
         if _AUTOSOLO and ref and obj != ref:
             _self.disable(obj)                # hidden; styled lazily on first view (pgup/pgdn)
         else:
             _style_one(obj, _self=_self)      # style now (default: every object on load)
 
 
-# Persistent set of known objects: lets the hooks find newly-loaded objects with ONE
-# get_object_list() per load (not 3) -> drops the load-phase O(N^2). Reconciled to the
-# live list each load, so delete+reload of the same name still works.
+# Track only objects managed by these hooks. Before/after names distinguish a
+# new load from existing review objects created by load_raw or other plugins.
 _KNOWN_OBJS = set()
 
 
 def _pymolrc_load_hook(*args, **kwargs):
+    before = set(cmd.get_object_list())
     result = _pymolrc_orig_load(*args, **kwargs)
     try:
-        cur = cmd.get_object_list()                       # ONE scan
-        new = [o for o in cur if o not in _KNOWN_OBJS]
+        cur = cmd.get_object_list()
+        fn = args[0] if args else kwargs.get('filename')
+        fmt = args[3] if len(args) > 3 else kwargs.get('format', '')
+        session = str(fmt).lower() in ('pse', 'psw', 'pze') or str(fn).lower().removesuffix('.gz').endswith(('.pse', '.psw', '.pze'))
+        if session:
+            # A session already contains deliberate colors, representations,
+            # enabled objects and camera. Do not restyle now or on navigation.
+            _KNOWN_OBJS.clear()
+            _KNOWN_OBJS.update(cur)
+            _STYLED.clear()
+            _STYLED.update(cur)
+            getattr(cmd, '_rfd4_viewer_state', {}).get('objects', {}).clear()
+            return result
+        new = [o for o in cur if o not in before]
         if new:
             fn = args[0] if args else kwargs.get('filename')
             _pymolrc_autostyle_new(fn, new, cur[0] if cur else None)   # ref passed (no re-fetch)
@@ -1055,10 +1129,11 @@ def _pymolrc_load_hook(*args, **kwargs):
 
 
 def _pymolrc_fetch_hook(*args, **kwargs):
+    before = set(cmd.get_object_list())
     result = _pymolrc_orig_fetch(*args, **kwargs)
     try:
         cur = cmd.get_object_list()
-        new = [o for o in cur if o not in _KNOWN_OBJS]
+        new = [o for o in cur if o not in before]
         if new:
             _pymolrc_autostyle_new(None, new, cur[0] if cur else None)   # fetched: no REMARK 666 MATCH
             _KNOWN_OBJS.update(new)

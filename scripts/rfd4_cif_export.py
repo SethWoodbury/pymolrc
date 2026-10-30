@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import select
 import traceback
+from rfd4_cif_fast import centroid_targets
 
 
 def export_model(filename):
@@ -20,13 +21,14 @@ def export_model(filename):
     from atomworks.io.utils.standard_annotations import S_SEGMIN, S_SEGMAX
     from atomworks.ml.conditions import C_CRD, C_SEQ, C_IDX
     from biotite.structure import BondType
-    from rfproteina.conditions import C_IDXGRP, C_HB, C_RAS, HBondEnum, RasaEnum
+    from rfproteina.conditions import C_IDXGRP, C_HB, C_RAS, C_CRDGRP, C_CENTROID, HBondEnum, RasaEnum
     from rfproteina.utils.parse_presets import ANNOTATED_CIF
 
     path = Path(filename).expanduser().resolve(strict=True)
     preset = ANNOTATED_CIF.replace(build_assembly=None, model=1, altloc="first")
     array = parse(str(path), config=preset)["asym_unit"][0]
     annotations = set(array.get_annotation_categories())
+    centroids = centroid_targets(array.chain_id, C_CENTROID.annotation(array, default="generate"))
     segment = S_SEGMIN.mask(array, default="generate")
     occupancy = array.occupancy if "occupancy" in annotations else np.ones(len(array))
     # Expandable placeholders are instructions, not physical atoms at the origin.
@@ -35,11 +37,13 @@ def export_model(filename):
         raise ValueError("No occupied finite physical coordinates remain after excluding placeholders.")
     masks = {
         "fixed": C_CRD.mask(array, default="generate"),
+        "internal": C_CRDGRP.is_internal(array),
         "sequence_fixed": C_SEQ.mask(array, default="generate"),
         "unindexed": ~C_IDX.annotation(array, default="generate").astype(bool),
     }
     values = {
         "index_group": C_IDXGRP.annotation(array, default="generate"),
+        "coordinate_group": C_CRDGRP.annotation(array, default="generate"),
         "hbond": C_HB.annotation(array, default="generate"),
         "rasa": C_RAS.annotation(array, default="generate"),
     }
@@ -52,6 +56,7 @@ def export_model(filename):
             "charge": int(array.charge[i]) if "charge" in annotations else 0,
             **{key: bool(mask[i]) for key, mask in masks.items()},
             "index_group": int(values["index_group"][i]),
+            "coordinate_group": int(values["coordinate_group"][i]),
             "hbond": HBondEnum(int(values["hbond"][i])).name,
             "rasa": RasaEnum(int(values["rasa"][i])).name,
         })
@@ -70,7 +75,7 @@ def export_model(filename):
             seen.add(key)
             segments.append({"chain": key[0], "resi": key[1],
                              "min": int(S_SEGMIN.annotation(array)[i]), "max": int(S_SEGMAX.annotation(array)[i])})
-    return {"source": str(path), "atoms": atoms, "bonds": bonds, "segments": segments,
+    return {"source": str(path), "atoms": atoms, "bonds": bonds, "segments": segments, "centroids": centroids,
             "excluded_atoms": int((~keep).sum()), "parse": "ANNOTATED_CIF / asymmetric unit / model 1 / first altloc",
             "condition_fields": sorted(name for name in annotations if name.startswith("condition_")),
             "present": {key: condition.full_name in annotations for key, condition in {

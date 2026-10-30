@@ -17,8 +17,10 @@ from pymol import cmd
 def check_model(obj):
     model = cmd.get_model(obj)
     data = cmd._rfd4_viewer_state['objects'][obj]
+    marker_indices = set(data['centroid_indices'])
+    physical_atoms = [a for a in model.atom if a.index not in marker_indices]
     expected = {(a['chain'], a['resi'], a['resn'], a['name']): a for a in data['atoms']}
-    actual = {(a.chain, a.resi, a.resn, a.name): a for a in model.atom}
+    actual = {(a.chain, a.resi, a.resn, a.name): a for a in physical_atoms}
     assert expected.keys() == actual.keys()
     for key, atom in actual.items():
         assert atom.coord == expected[key]['coord'], (key, atom.coord, expected[key]['coord'])
@@ -30,10 +32,13 @@ def check_model(obj):
     actual_bonds = {(frozenset((actual_keys[b.index[0]], actual_keys[b.index[1]])), b.order) for b in model.bond}
     assert expected_bonds == actual_bonds
     assert all(math.isfinite(v) for corner in cmd.get_extent(obj) for v in corner)
-    assert cmd.count_atoms('model ' + obj + ' and rep sticks') == len(model.atom)
+    assert cmd.count_atoms('model ' + obj + ' and rep sticks') == sum(a['fixed'] or a['internal'] for a in data['atoms'])
 
 
 def run_checks():
+    if os.environ.get('RFD4_EXPECT_DISK_CACHE') == '1':
+        # Explicit native runtime overrides also test the fallback cache route.
+        os.environ.setdefault('RFD4_REPO', str(Path.home() / 'git/RFD4-Proteina-dev'))
     sources = sorted(Path(os.environ['RFD4_VIEW_TEST_DIR']).glob('*.cif'))
     assert sources
     hashes = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}

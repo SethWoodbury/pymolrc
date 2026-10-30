@@ -18,7 +18,7 @@ import tempfile
 import threading
 import time
 
-SCHEMA = 1
+SCHEMA = 3
 MAX_CACHE_BYTES = 128 * 1024 * 1024
 _DIGESTS = {}
 _DIGEST_LOCK = threading.Lock()
@@ -99,7 +99,7 @@ def provenance(config):
             pass
         _DIGESTS_LOADED = True
     repo, python = Path(config["repo"]), Path(config["python"])
-    code = {Path(__file__), Path(config["exporter"])}
+    code = {Path(__file__), Path(config["exporter"]), Path(__file__).with_name("rfd4_cif_fast.py")}
     state = {python, python.resolve()}
     roots = [repo / "src/rfproteina", repo / "lib/atomworks/src/atomworks"]
     # Editable checkout code and installed parsing dependencies are both tracked.
@@ -158,12 +158,15 @@ def validate_model(model):
         if not isinstance(atom.get("coord"), list) or len(atom["coord"]) != 3 or not all(
                 type(v) in (int, float) and math.isfinite(v) for v in atom["coord"]):
             raise ValueError("Invalid or nonfinite atom coordinates.")
-        for name in ("hetero", "fixed", "sequence_fixed", "unindexed"):
+        for name in ("hetero", "fixed", "internal", "sequence_fixed", "unindexed"):
             if type(atom.get(name)) is not bool:
                 raise ValueError("Invalid boolean annotation: " + name)
-        for name in ("charge", "index_group"):
+        for name in ("charge", "index_group", "coordinate_group"):
             if type(atom.get(name)) is not int:
                 raise ValueError("Invalid integer annotation: " + name)
+        group = atom["coordinate_group"]
+        if group < -1 or atom["fixed"] != (group == 0) or atom["internal"] != (group > 0):
+            raise ValueError("Coordinate membership disagrees with absolute/internal targets.")
         occupancy = atom.get("occupancy")
         if type(occupancy) not in (int, float) or not math.isfinite(occupancy) or occupancy <= 0:
             raise ValueError("Invalid occupied-atom occupancy.")
@@ -189,6 +192,19 @@ def validate_model(model):
     for segment in model["segments"]:
         if not isinstance(segment, dict) or not isinstance(segment.get("chain"), str) or not all(type(segment.get(name)) is int for name in ("resi", "min", "max")) or not 0 <= segment["min"] <= segment["max"]:
             raise ValueError("Invalid expandable segment.")
+    if not isinstance(model.get("centroids"), list):
+        raise ValueError("Missing chain-centroid metadata.")
+    centroid_chains = set()
+    for target in model["centroids"]:
+        if not isinstance(target, dict) or not isinstance(target.get("chain"), str):
+            raise ValueError("Invalid chain-centroid identity.")
+        if target["chain"] in centroid_chains:
+            raise ValueError("Duplicate chain-centroid target.")
+        centroid_chains.add(target["chain"])
+        xyz = target.get("xyz")
+        if not isinstance(xyz, list) or len(xyz) != 3 or not all(
+                type(value) in (int, float) and math.isfinite(value) for value in xyz):
+            raise ValueError("Invalid chain-centroid coordinates.")
     if not isinstance(model.get("condition_fields"), list) or not all(isinstance(v, str) for v in model["condition_fields"]):
         raise ValueError("Invalid condition-field list.")
     if not isinstance(model.get("present"), dict) or any(type(model["present"].get(name)) is not bool for name in ("fixed", "sequence_fixed", "unindexed", "hbond", "rasa")):
@@ -243,6 +259,9 @@ def write_cached(source_hash, reader, model, directory=None):
     for atom in model["atoms"]:
         atom.pop("pymol_index", None)
     model.pop("selections_created", None)
+    model.pop("coordinate_selections_created", None)
+    model.pop("centroid_indices", None)
+    model.pop("show_centroids", None)
     directory = Path(directory or cache_root())
     path = cache_path(source_hash, reader["sha256"], directory)
     _atomic_json(path, {"schema": SCHEMA, "source_sha256": source_hash, "reader_sha256": reader["sha256"],

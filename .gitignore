@@ -4,3 +4,6 @@ pymolrc_backup_2026-06-12.pymolrc
 # Python cruft
 __pycache__/
 *.pyc
+
+# Local qualification receipts may contain private campaign paths and geometry.
+docs/rfd4_viewer_qualification_*/
