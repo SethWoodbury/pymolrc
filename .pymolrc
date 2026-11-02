@@ -179,6 +179,14 @@ set_color RFd_navaho, [255,224,172]
 # --- RFdiffusion3 gradient (reuses RFd_pink/purple/darkblue, adds teal) ---
 set_color paper_teal, [79,185,175]
 
+# --- RFD4-Proteina: Northern Nights molecular_spectrum, N->C ---
+# paper/style/theme.json at f336faf492d3, the revision cited by
+# https://rfd4-proteina.org/assets/site-colors.css (checked 2026-11-02).
+set_color rfd4p_teal, [24,108,112]  # 186C70
+set_color rfd4p_blue, [59,90,141]  # 3B5A8D
+set_color rfd4p_violet, [70,61,115]  # 463D73
+set_color rfd4p_purple, [141,82,173]  # 8D52AD
+
 # Background
 bg_color black
 
@@ -1324,6 +1332,24 @@ def color_bb_rfdiffusion3(selection="chain A", all_atom=0, backbone_only=0, _sel
                    "%s and resi %d-%d" % (sel, mid + 1, hi))
 
 
+def color_bb_rfdiffusion4_proteina(selection="chain A", all_atom=0, backbone_only=0, _self=cmd):
+    """Color `selection` N->C with the RFD4-Proteina Northern Nights gradient
+    (teal -> blue -> violet -> purple), using the paper's molecular_spectrum stops.
+
+    Same options as color_bb_rfdiffusion:
+      selection       one or more chains / any selection (default 'chain A')
+      all_atom=1      recolor every element, not just carbons
+      backbone_only=1 restrict to backbone atoms (sidechains keep their colors)
+    """
+    palette = "rfd4p_teal rfd4p_blue rfd4p_violet rfd4p_purple"
+    sel = "(%s)" % selection
+    if not _rfd_bool(all_atom):
+        sel += " and elem C"
+    if _rfd_bool(backbone_only):
+        sel += " and backbone"
+    _self.spectrum("resi", palette, sel)
+
+
 def gaussian_mode(selection="all", _self=cmd):
     """Quantum-chemistry / GaussView look: glossy ball-and-stick (every atom incl.
     H as a shiny sphere, metal larger), bond orders, and perspective. Colors are
@@ -1840,6 +1866,7 @@ def draw_connectors(obj, color="grey50", max_dist=14.0, _self=cmd):
 cmd.extend('color_palette', color_palette)
 cmd.extend('color_bb_rfdiffusion', color_bb_rfdiffusion)
 cmd.extend('color_bb_rfdiffusion3', color_bb_rfdiffusion3)
+cmd.extend('color_bb_rfdiffusion4_proteina', color_bb_rfdiffusion4_proteina)
 cmd.extend('gaussian_mode', gaussian_mode)
 cmd.extend('gaussian_off', gaussian_off)
 cmd.extend('gaussian_spin', gaussian_spin)
@@ -1950,6 +1977,7 @@ RFdiffusion3    : rfd3_movie  rfd3_check_frames  style_fixed  apply_camera
                   draw_connectors  catalytic_sel_from_motif  add_custom_bond  remove_bond
 Look & color    : color_palette  autostyle  style_all  publication_ray_trace
                   color_bb_rfdiffusion  color_bb_rfdiffusion3
+                  color_bb_rfdiffusion4_proteina
                   gaussian_mode  gaussian_off  gaussian_spin  bg_white  bg_black
 Align & arrange : align_all  center_all  autoalign  autosolo
 Select & inspect: seq  show_catres  only_catres  show_metals

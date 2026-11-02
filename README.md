@@ -57,6 +57,7 @@ group, or `help_crystal` / `help_rfd3` for a specific kit's full argument refere
 | `publication_ray_trace` | ray-traced figure render |
 | `color_bb_rfdiffusion [sel]` | RFdiffusion gradient (dark blue → navaho), N→C |
 | `color_bb_rfdiffusion3 [sel]` | RFdiffusion3 gradient (pink → purple → teal → dark blue), N→C |
+| `color_bb_rfdiffusion4_proteina [sel]` | RFD4-Proteina Northern Nights gradient (teal → blue → violet → purple), N→C |
 | `gaussian_mode [sel]` · `gaussian_off [sel]` | GaussView / QM look (glossy ball-and-stick, bond orders, perspective), and restore |
 | `gaussian_spin` `on\|off` | gentle continuous spin (GUI) |
 | `rfd3_movie <traj.cif.gz>` | RFdiffusion3 diffusion movie from one trajectory: diffusing protein as CA spheres + V-cloud, fixed motif/cofactor auto-detected and styled via `style_fixed`; fully configurable — `color_scheme=` takes the default RFd3 gradient, a flat custom color, or a space-separated custom multi-color gradient; `ca_scale=`/`cloud_scale=`/`cloud_transparency=` size knobs; `bonds=`/`unbonds=` lists to force/remove bonds on load; any other keyword (`trim_atoms=`, `color_map=`, `lig_rep=`, ...) passes straight through to `style_fixed`; plus `reverse=1`, `fixed_sidechain=1`, JSON cross-check (`fixed_json=`/auto); auto-runs `rfd3_check_frames` and prints whether `reverse=` actually plays noise → folded for that file; then `mplay` |
@@ -79,6 +80,23 @@ group, or `help_crystal` / `help_rfd3` for a specific kit's full argument refere
 The `color_bb_*` commands default to `chain A` and recolor carbons only (non-carbon atoms
 left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep
 sidechains as they are.
+
+The RFD4-Proteina gradient uses the manuscript's **Northern Nights**
+`molecular_spectrum`: teal `#186C70` → blue `#3B5A8D` → violet `#463D73` →
+purple `#8D52AD`. These stops come from `paper/style/theme.json` at revision
+`f336faf492d3`, the manuscript revision cited by the
+[website stylesheet](https://github.com/RosettaCommons/RFD4-Proteina/blob/main/website/assets/site-colors.css),
+and match the [preprint's](https://rfd4-proteina.org/assets/paper/RFD4-Proteina.pdf)
+molecular palette. The website's interactive viewers use a flat teal instead.
+Colors are interpolated by residue number, as in `color_bb_rfdiffusion`.
+The individual colors are also available as `rfd4p_teal`, `rfd4p_blue`,
+`rfd4p_violet`, and `rfd4p_purple`.
+
+```pml
+color_bb_rfdiffusion4_proteina chain A
+color_bb_rfdiffusion4_proteina chain A, backbone_only=1
+color_bb_rfdiffusion4_proteina my_design, all_atom=1
+```
 
 ## Brand colors
 
