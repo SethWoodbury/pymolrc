@@ -32,7 +32,7 @@ def check_model(obj):
     actual_bonds = {(frozenset((actual_keys[b.index[0]], actual_keys[b.index[1]])), b.order) for b in model.bond}
     assert expected_bonds == actual_bonds
     assert all(math.isfinite(v) for corner in cmd.get_extent(obj) for v in corner)
-    assert cmd.count_atoms(obj + '_reference and (rep sticks or rep spheres)') == 0
+    assert cmd.count_atoms(obj + '_reference and not metals and (rep sticks or rep spheres)') == 0
     cmd.keyword['rfd4_style'][0](obj, markers='all', labels=0)
     assert cmd.count_atoms('model ' + obj + ' and rep sticks') == sum(a['fixed'] or a['internal'] for a in data['atoms'])
 

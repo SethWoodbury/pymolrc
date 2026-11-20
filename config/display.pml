@@ -168,6 +168,15 @@ set_color rfd4p_violet, [70,61,115]  # 463D73
 set_color rfd4p_purple, [141,82,173]  # 8D52AD
 
 # Molecular themes. Hex values are listed beside their names in docs/COLORS.md.
+set_color mineral_stone, [140,132,116]
+set_color mineral_taupe, [119,109,95]
+set_color mineral_site, [159,145,119]
+set_color mineral_lagoon, [54,162,175]
+set_color fern_leaf, [88,122,93]
+set_color fern_sage, [96,129,105]
+set_color fern_site, [119,153,122]
+set_color fern_orchid, [186,121,182]
+set_color ligand_olive, [139,151,80]
 set_color fjord_mint, [140,203,195]
 set_color fjord_teal, [85,158,170]
 set_color fjord_lilac, [190,151,221]

@@ -2,11 +2,9 @@
 
 Open a structure with `pymol`. Use `pymolrfd4` to inspect coordinate and sequence annotations in RFdiffusion4-Proteina CIFs. Both commands accept the usual PyMOL flags and multiple files.
 
-![Coordinate constraints on a protein cartoon alongside the Classic, Fjord, Clay, and Iris carbon palettes](docs/viewer-guide.png)
+![Mineral and Fern in a black PyMOL viewport and a white ray render, with solid cartoons, sequence gradients, and a ligand pocket containing two zinc ions](docs/molecular-palettes.png)
 
-The left panel uses illustrative masks on backbone coordinates from the bundled example. The four palette previews use the same structure and camera.
-
-Ordinary structures open with the original matte green cartoons and amethyst ligand carbons. Ray-traced images have black outlines. Nitrogen is blue, oxygen red, sulfur yellow, and phosphorus bright orange.
+**Mineral** opens with a warm taupe protein and lagoon-colored ligand carbons. The original matte cartoon lighting and black ray outlines apply to every theme. Hydrogen, nitrogen, oxygen, phosphorus, sulfur, and metals use PyMOL’s element colors by default. **Fern** pairs a muted green protein with orchid ligand carbons. Both examples above use the bundled crystal design.
 
 ## Install
 
@@ -36,7 +34,10 @@ For a large batch, put one structure path per line in `models.txt` and run `pymo
 | In PyMOL | Action |
 |---|---|
 | `theme next`, `theme prev` | Preview the next or previous palette on open structures |
-| `theme classic` | Return to the startup colors |
+| `theme mineral` or `theme fern` | Choose a molecular palette |
+| `theme mineral, gradient=on` | Shade each chain’s cartoon from N to C. Use `gradient=off` for the solid cartoon |
+| `ligand_colors by_type` or `ligand_colors uniform` | Distinguish ligand components or give them the same carbon color |
+| `theme classic, gradient=off` | Return to the original green cartoons and amethyst ligands |
 | `theme foliage` | Use the same greens and amethyst with the original soft element colors |
 | `rfd4_style , coordinates, markers=all` | Show every coordinate-conditioned atom as a small sphere |
 | `rfd4_style , sequence` | Inspect fixed and free residue identities |
@@ -48,7 +49,7 @@ For a large batch, put one structure path per line in `models.txt` and run `pymo
 
 - Browse structure lists with `browse_list` and the page keys. Inspect sequences with `seq`, metal ions with `show_metals`, and PDB matcher residues with `show_catres`. [Command reference](docs/COMMANDS.md)
 - Choose molecular and brand colors or apply an RFdiffusion backbone gradient. [Color guide](docs/COLORS.md)
-- Inspect atom masks, centroid markers, and reader timings. [RFD4 inspection guide](RFD4_QUICKSTART.md)
+- Inspect atom masks, centroid markers, and reader timings. [RFD4 inspection guide](RFD4_QUICKSTART.md) · [Rendered constraint legend](docs/viewer-guide.png)
 - Make trajectory movies and figures with the standalone RFD3 kit. [RFD3 quickstart](RFD3_QUICKSTART.md) · [Figure examples](docs/RFD3_FIGURES.md)
 - Superpose refined structures and view electron density with the crystallography kit. [Crystal commands and bundled example](crystallography/README.md)
 

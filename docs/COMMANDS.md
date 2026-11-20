@@ -8,7 +8,9 @@ group, or `help_crystal` / `help_rfd3` for a specific kit's full argument refere
 | `theme [list / next / prev / name]` | browse palettes or apply one to this session |
 | `rfd4_autoload on/off` | switch annotation inspection for subsequent loads |
 | `seq [sel-or-file]` | print the one-letter sequence of a selection/object, or a structure file path (`seq ~/x.pdb` loads it temporarily); prints usage on a bad input. Aliases: `sequence`, `get_seq`, `get_sequence` |
-| `show_metals [sel]` | show metals as spheres |
+| `show_metals [sel]` | Show metal spheres in the selection. Explicit hides and disabled objects remain available |
+| `theme [name], gradient=on` or `off` | Choose a carbon palette and optionally shade each chain’s cartoon from N to C |
+| `ligand_colors uniform` · `by_type` · `list` | Set one ligand carbon color, assign colors by component name, or inspect assignments |
 | `show_catres [sel]` · `only_catres` | catalytic-residue sticks |
 | `style_all [sel]` | (re)apply the full style |
 | `color_palette [sel]` | align objects and apply the legacy foliage cycle and ligand shell |

@@ -67,32 +67,14 @@ def bind_structure_navigation_keys(_self=cmd):
 # Change anytime, e.g.:  set_color catres_hi = [250,199,44]   (or: color yellow, catres)
 cmd.set_color('catres_hi', [255, 150, 40])
 
-# Metal detection by ELEMENT and/or RESIDUE NAME and/or ATOM NAME.
-# The atom-name clause is guarded with "not polymer.protein" because atom name
-# "CA" is the protein alpha-carbon, NOT calcium (so naive name matching would
-# sphere every residue). Element/resn matching is unambiguous.
-_METAL_ELEMS = ('Zn+Fe+Mg+Mn+Cu+Co+Ni+Ca+Na+K+Mo+V+W+Cd+Hg+Pt+Pd+Au+Ag+Al+'
-                'Ba+Sr+Li+Cs+Rb+Cr')
+# PyMOL recognizes elemental metals even when they share a residue with organic
+# atoms. Old ion names are a fallback only where the element field is unknown.
 _METAL_RESNS = ('ZN+FE+FE2+MG+MN+MN3+CU+CU1+CO+3CO+NI+CA+NA+K+MO+CD+HG+PT+PD+'
                 'AU+AG+AL+BA+SR+LI+CS+RB+CR+V+W')
 _METAL_NAMES = ('ZN+FE+MG+MN+CU+CO+NI+NA+K+MO+CD+HG+PT+PD+AU+AG+AL+BA+SR+LI+'
                 'CS+RB+CR')
-# Organic elements. An atom whose NAME collides with a metal symbol -- "CD"
-# (Lys/Arg/Pro/Glu/Gln or carboxy-Lys KCX delta-carbon), "CO" (carbonyl C),
-# "NI", "SR", ... -- but whose ELEMENT is one of these is NOT a metal. It is a
-# side-chain/backbone atom of a non-standard residue (KCX, MSE, ligands) that
-# PyMOL flags `not polymer`, so the `not polymer` gate below does not protect it
-# the way it protects the alpha-carbon "CA". Excluding organic-element atoms from
-# the name-based clause keeps e.g. the KCX CD carbon from being drawn as a grey
-# metal sphere, while genuine ions (correct metal element) still match.
-_METAL_ORGANIC = 'C+N+O+H+S+P+Se+B+F+Cl+Br+I'
-# Gate on `not polymer` FIRST (a fast per-atom flag): metals/ions are never part of a
-# protein/nucleic polymer chain. This shrinks the expensive elem/resn/name token match
-# from every atom to just the handful of hetero atoms (~60x faster styling on load),
-# and it makes the alpha-carbon "CA" safe automatically (CA is always polymer).
-_METAL_SEL = ('(not polymer) and ((elem %s) or (resn %s) or '
-              '((name %s) and not elem %s))'
-              % (_METAL_ELEMS, _METAL_RESNS, _METAL_NAMES, _METAL_ORGANIC))
+_METAL_SEL = ('(metals or (not polymer and (elem X or elem "") and (resn %s or name %s)))'
+              % (_METAL_RESNS, _METAL_NAMES))
 
 _CATRES_BY_OBJ = {}
 _STYLED = set()
@@ -118,11 +100,11 @@ def show_metals(selection="all", _self=cmd):
     _self.show('spheres', sel)
     color = "elemZn" if _self._pymolrc_theme == "foliage" else "atomic"
     _self.color(color, sel)
+    _self.set("sphere_color", -1, sel)
 
 
-# PMLs often hide everything after load and then show sticks/lines. Isolated
-# ions have no bonds to draw, so restore their spheres when that representation
-# is requested. Do not wrap hide/disable or change colors, coordinates or bonds.
+# Isolated ions need their own representation when the surrounding structure is
+# shown as a cartoon, a surface, or bonds. Explicit hides remain available.
 # Keep original functions on cmd so reloading this section cannot nest hooks.
 if not hasattr(cmd, '_pymolrc_metal_show_state'):
     cmd._pymolrc_metal_show_state = {'show': cmd.show, 'show_as': cmd.show_as}
@@ -138,8 +120,9 @@ def _pymolrc_add_metal_spheres(representation, selection, _self=cmd):
                           '(' in representation or '/' in representation):
         selection, representation = representation, 'wire'
     repmask = viewing._rep_to_repmask(representation)
-    if not repmask & (viewing.repmasks['sticks'] | viewing.repmasks['lines'] |
-                      viewing.repmasks['nonbonded'] | viewing.repmasks['nb_spheres']):
+    molecular = ('sticks', 'lines', 'cartoon', 'ribbon', 'surface', 'mesh', 'dots',
+                 'nonbonded', 'nb_spheres')
+    if not any(repmask & viewing.repmasks[rep] for rep in molecular):
         return
     selected = selector.process(selection) or 'all'
     _METAL_SHOW_STATE['show']('spheres', '(%s) and (%s)' % (selected, _METAL_SEL), _self=_self)
@@ -224,7 +207,11 @@ def _catres_iter(_self=cmd):
         yield obj, _catres_obj_sel(obj, _CATRES_BY_OBJ[obj])
 
 
-def _color_catres(obj, _self=cmd, show_sticks=True):
+def _site_carbon(_self):
+    return {"mineral": "mineral_site", "fern": "fern_site"}.get(_self._pymolrc_theme, "catres_hi")
+
+
+def _color_catres(obj, _self=cmd, show_sticks=True, color=None):
     cats = _CATRES_BY_OBJ.get(obj)
     if not cats:
         return
@@ -232,7 +219,7 @@ def _color_catres(obj, _self=cmd, show_sticks=True):
     # Highlight only SIDECHAIN carbons (backbone keeps the protein color), EXCEPT
     # PRO/GLY whose backbone carbons ARE highlighted. One merged color op; stick
     # radius comes from the global stick_radius (no per-selection `set`).
-    _self.color('catres_hi',
+    _self.color(color or _site_carbon(_self),
                 '((%s) and sidechain and elem C) or ((%s) and resn PRO+GLY and elem C)' % (sel, sel))
     if show_sticks:
         _self.show('sticks', '(%s) and (sidechain or name CA) and not hydro and not resn GLY' % sel)
@@ -245,7 +232,7 @@ def _style_one(obj, _self=cmd):
         return
     _color_structure(obj, _self)
     _self.show("sticks", "(%s) and organic and not hydro and not (%s)" % (obj, _METAL_SEL))
-    show_metals(obj, _self=_self)
+    _self.show("spheres", "(%s) and %s" % (obj, _METAL_SEL))
     _color_catres(obj, _self=_self)
     _STYLED.add(obj)
 
@@ -269,8 +256,7 @@ def only_catres(_self=cmd):
         if _self.count_atoms(stick):
             _self.show('sticks', stick)
             _self.set('stick_radius', 0.25, stick)
-        _self.color('catres_hi', '(%s) and sidechain and elem C' % sel)
-        _self.color('catres_hi', '(%s) and resn PRO+GLY and elem C' % sel)
+        _color_catres(obj, _self, show_sticks=False)
         n += _self.count_atoms('(%s) and name CA' % sel)
     if n:
         print('only_catres: showing %d catalytic residue(s) as sticks.' % n)
@@ -501,7 +487,7 @@ def _style_catres_batched(objs, _self=cmd, chunk=40):
             continue
         _self.select('_cat_tmp', ' or '.join(parts))
         _self.show('sticks', '_cat_tmp and (sidechain or name CA) and not hydro and not resn GLY')
-        _self.color('catres_hi', '(_cat_tmp and sidechain and elem C) or (_cat_tmp and resn PRO+GLY and elem C)')
+        _self.color(_site_carbon(_self), '(_cat_tmp and sidechain and elem C) or (_cat_tmp and resn PRO+GLY and elem C)')
     _self.delete('_cat_tmp')
     _self.deselect()
 
@@ -509,7 +495,7 @@ def _style_catres_batched(objs, _self=cmd, chunk=40):
 def style_all(selection="all", _self=cmd):
     """Apply the current theme to ordinary structures in one batched operation."""
     objs = _self.get_object_list() if selection in ('all', '(all)', '*') else _self.get_object_list(selection)
-    annotated = getattr(_self, '_rfd4_viewer_state', {}).get('objects', {})
+    annotated = _annotation_groups(_self) | getattr(_self, '_rfd4_viewer_state', {}).get('objects', {}).keys()
     protected = [obj for obj in objs if obj in annotated]
     objs = [obj for obj in objs if obj not in annotated]
     if not objs:

@@ -71,7 +71,7 @@ def color_palette(selection="all", ligand_shell_radius=5.0, _self=cmd):
     # Metals as spheres (element/resn/atom-name) + catalytic (REMARK 666) sticks
     _self.show("spheres", "(%s) and (%s)" % (selection, _METAL_SEL))
     for _obj in objects:
-        _color_catres(_obj, _self=_self)
+        _color_catres(_obj, _self=_self, color="catres_hi")
     if _AF3_CLASH_FILTER_ENABLED:
         remove_clash_bonds(selection, _self=_self)
     if _AF3_LIGAND_CENTER_FILTER_ENABLED:

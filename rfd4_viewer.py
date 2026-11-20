@@ -38,6 +38,8 @@ def _viewer_module(name):
 _RFD4_CACHE = _viewer_module("rfd4_model_cache")
 _RFD4_DETECT = _viewer_module("rfd4_cif_detect")
 _RFD4_FAST = _viewer_module("rfd4_cif_fast")
+if "paint_component_carbons" not in globals():
+    paint_component_carbons = _viewer_module("pymol_components").paint_component_carbons
 _RFD4_STATE.setdefault("cache_stats", {"memory_hits": 0, "disk_hits": 0, "native_parses": 0,
                                       "last_seconds": 0.0, "last_route": "none"})
 _RFD4_STATE["cache_stats"].setdefault("lightweight_reads", 0)
@@ -352,7 +354,7 @@ _RFD4_MODES = {
     "hbond": (("hb_donor", "marine"), ("hb_acceptor", "salmon"), ("hb_both", "magenta")),
     "burial": (("buried", "forest"), ("partial", "orange"), ("exposed", "skyblue")),
 }
-_RFD4_METALS = "Zn+Fe+Mg+Mn+Cu+Co+Ni+Ca+Na+K+Mo+V+W+Cd+Hg+Pt+Pd+Au+Ag+Al+Ba+Sr+Li+Cs+Rb+Cr"
+_RFD4_METAL_SEL = globals().get("_METAL_SEL", "metals")
 for _name, _rgb in {"rfd4_gold": (246, 187, 69), "rfd4_ochre": (184, 146, 74),
                     "rfd4_lilac": (187, 145, 245),
                     "rfd4_slate": (105, 177, 216)}.items():
@@ -379,17 +381,28 @@ def _rfd4_recolor(obj, _self=cmd):
     _self.color(protein_color, scoped + " and polymer.protein and elem C")
     if mode == "elements":
         _self.color(colors["backbone"], scoped + " and polymer.protein and elem C and backbone")
-    _self.color(colors["ligand"], scoped + " and not polymer.protein and elem C")
+    if legacy:
+        _self.color(colors["ligand"], scoped + " and not polymer.protein and elem C")
+    elif "_paint_ligand_carbons" in globals():
+        _paint_ligand_carbons(scoped, colors["ligand"], _self, protein_color=protein_color)
+    else:
+        paint_component_carbons(scoped, colors["ligand"], _self, protein_color=protein_color)
     if colors["soft"]:
         for symbol in ("N", "O", "S", "P", "H"):
             color = "elem" + symbol
             if _self.get_color_index(color) >= 0:
                 _self.color(color, scoped + " and elem " + symbol)
         if _self.get_color_index("elemZn") >= 0:
-            _self.color("elemZn", scoped + " and elem " + _RFD4_METALS)
+            _self.color("elemZn", scoped + " and " + _RFD4_METAL_SEL)
     if mode in {"coordinates", "legacy"}:
         _self.color(internal_color, internal + " and elem C")
     _shade_free_identity(obj, _self)
+    if mode == "elements":
+        if getattr(_self, "_pymolrc_gradient", False) and "_cartoon_gradient" in globals():
+            _cartoon_gradient(scoped, _self._pymolrc_theme, _self)
+            data["cartoon_gradient"] = True
+        elif data.pop("cartoon_gradient", False):
+            _self.unset("cartoon_color", scoped + " and polymer.protein and name CA")
 
 
 def rfd4_style(object="", mode="coordinates", labels=0, context="cartoon", element_colors=1, _self=cmd,
@@ -439,15 +452,19 @@ def rfd4_style(object="", mode="coordinates", labels=0, context="cartoon", eleme
         mixed = "(byres (%s or %s))" % (reference, internal)
         shown = "(%s and not ((%s) and not %s))" % (targets, interior, mixed)
     visible = scoped if not coordinate_view or context_name != "off" else targets
+    metal_scope = shown if legacy else visible
+    metal_atoms = "(%s) and %s" % (metal_scope, _RFD4_METAL_SEL)
 
     # This viewer handles metal visibility explicitly in each context.
     show = getattr(_self, "_pymolrc_metal_show_state", {}).get("show", _self.show)
     _self.hide("everything", obj)
     _self.unset("cartoon_color", scoped)
+    if data.pop("cartoon_gradient", False):
+        _self.unset("cartoon_color", scoped + " and polymer.protein and name CA")
     _self.unset("sphere_color", scoped)
     _self.unset("sphere_scale", obj)
     _self.unset("sphere_scale", scoped)
-    _self.set("sphere_scale", scale, "%s and not elem %s" % (scoped, _RFD4_METALS))
+    _self.set("sphere_scale", scale, "%s and not %s" % (scoped, _RFD4_METAL_SEL))
     _self.set("stick_radius", 0.13, obj)
     show("sticks", shown)
     show("nonbonded", shown)
@@ -462,6 +479,11 @@ def rfd4_style(object="", mode="coordinates", labels=0, context="cartoon", eleme
         show("nonbonded", lines)
         _self.hide("spheres", reference)
 
+    if not coordinate_view and int(element_colors):
+        # Store elemental sphere faces before applying condition colors to the
+        # atoms. A metal donor can have a native sphere and a donor-colored stick.
+        _self.color("atomic", metal_atoms)
+        _self.alter(metal_atoms, "s.sphere_color = color")
     if not chemical_colors:
         _self.color("gray60", obj)
     if chemical_colors:
@@ -479,13 +501,16 @@ def rfd4_style(object="", mode="coordinates", labels=0, context="cartoon", eleme
             # Representation colors encode the coordinate mask even on O/N/P.
             # Atom/stick colors still identify the element.
             for selection, color in ((absolute, fixed_color), (internal, internal_color)):
-                _self.set("sphere_color", color, selection)
+                beads = selection + " and not " + _RFD4_METAL_SEL if chemical_colors else selection
+                _self.set("sphere_color", color, beads)
             _self.set("cartoon_color", fixed_cartoon, absolute)
             _self.set("cartoon_color", internal_color, internal)
             _self.set("cartoon_color", "rfd4_slate", reference)
     elif mode == "hbond":
         show("spheres", _selection(obj, "hb_donor") + " or " + _selection(obj, "hb_acceptor"))
-    show("spheres", "(%s) and elem %s" % (shown, _RFD4_METALS))
+    if not legacy and (chemical_colors or (not coordinate_view and not int(element_colors))):
+        _self.set("sphere_color", -1, metal_atoms)  # follow the atom's element color
+    show("spheres", metal_atoms)
     _self.label(obj, "")
     if int(labels):
         _self.label("(%s) and name CA" % visible, '"%s/%s%s" % (chain,resn,resi)')

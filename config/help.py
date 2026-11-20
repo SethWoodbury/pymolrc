@@ -11,7 +11,7 @@ Type the group-help command for full per-command args (mandatory vs optional):
 Crystallography : xtal  xtal_align  xtal_density  xtal_rms  xtal_catres  xtal_focus
 RFdiffusion3    : rfd3_movie  rfd3_check_frames  style_fixed  apply_camera
                   draw_connectors  catalytic_sel_from_motif  add_custom_bond  remove_bond
-Look & color    : theme  color_palette  autostyle  style_all  publication_ray_trace
+Look & color    : theme  ligand_colors  color_palette  autostyle  style_all  publication_ray_trace
                   color_bb_rfdiffusion  color_bb_rfdiffusion3
                   color_bb_rfdiffusion4_proteina
                   gaussian_mode  gaussian_off  gaussian_spin  bg_white  bg_black

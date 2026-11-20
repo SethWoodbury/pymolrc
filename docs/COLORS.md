@@ -1,18 +1,28 @@
 # Molecular palettes
 
-Type `theme next` or `theme prev` in PyMOL to cycle through the palettes. `theme list` marks the active one. Selecting a palette changes the open structures and sets the colors for subsequent loads in the session. All palettes share the original matte lighting, orthographic camera, and black outlines on ray renders.
+Type `theme next` or `theme prev` in PyMOL to cycle through the palettes. `theme list` marks the active one. Selecting a palette changes the open structures and sets the colors for subsequent loads in the session. All palettes share the original matte lighting, orthographic camera, and black outlines on ray renders. `bg_white` and `bg_black` switch the background.
 
-![The same molecular view in each palette and a synthetic coordinate mask](viewer-guide.png)
+![Actual black viewport and white ray renders of Mineral and Fern, including an N-to-C gradient and a close-up of the same ligand and zinc ions](molecular-palettes.png)
 
 | Theme | Sidechain carbon | Backbone carbon | Ligand carbon |
 |---|---|---|---|
-| `classic` (default) | Sage `sc05` | Forest `bb05` | Amethyst `lig_amethyst3` |
+| **`mineral` (default)** | Taupe `#776D5F` | Warm stone `#8C8474` | Lagoon `#36A2AF` |
+| `fern` | Sage `#608169` | Fern `#587A5D` | Orchid `#BA79B6` |
+| `classic` | Sage `sc05` | Forest `bb05` | Amethyst `lig_amethyst3` |
 | `fjord` | Mint `#8CCBC3` | Teal `#559EAA` | Lilac `#BE97DD` |
 | `clay` | Peach `#E4BAA4` | Terracotta `#BD8579` | Aqua `#7BBCC5` |
 | `iris` | Lavender `#B8ACE0` | Violet `#9283C2` | Jade `#7BC7A5` |
 | `foliage` | Sage `sc05` | Forest `bb05` | Amethyst `lig_amethyst3` |
 
-Classic, Fjord, Clay, and Iris use PyMOL’s stock element colors, including blue nitrogen, red oxygen, yellow sulfur, and bright orange phosphorus (`#FF8000`). Foliage uses the same protein and ligand colors as Classic with the original soft element palette. The older custom RGB that previously replaced PyMOL’s built-in `nitrogen` is available as `legacy_nitrogen`.
+The molecular themes use stock element colors, including white hydrogen, blue nitrogen, red oxygen, bright orange phosphorus (`#FF8000`), and yellow sulfur. Foliage restores the historical soft elements and uniform gray-blue metals. The old custom nitrogen is also available as `legacy_nitrogen`. In Mineral and Fern, REMARK 666 residues use lighter protein-colored sticks so that phosphorus is easy to pick out.
+
+**Ligands.** A single carbon color makes the same molecule easy to follow across models. Use `ligand_colors by_type` to assign accents by chemical component name (the PyMOL `resn` field). Copies of a component get the same accent across chains, objects, and later loads in that session. Two molecules both named `LIG` share an accent. `ligand_colors list` prints the assignments. Mineral cycles lagoon, orchid, and olive. With more components the accents repeat. `ligand_colors uniform` restores the theme’s ligand carbon. Water, metals, and atoms belonging to polymer residues keep their own colors.
+
+**Gradients.** `theme mineral, gradient=on` uses warm umber `#786F62` at N, stone `#8C8474` at the midpoint, and pale taupe `#A09886` at C. Fern runs from `#456950` through `#587A5D` to `#77977A`. Each chain starts its own ramp in residue-number and insertion-code order. Only the cartoon changes. Molecular sticks keep their atom colors, and RFD4 condition cartoons keep their constraint colors. Use `rfd4_style , elements` to see the molecular palette on an inspected file. `theme mineral, gradient=off` returns to a flat cartoon.
+
+Set `PYMOLRC_THEME` to a palette name and `PYMOLRC_GRADIENT` to `on` or `off` to choose your startup look. For example, `PYMOLRC_THEME=fern PYMOLRC_GRADIENT=on pymol model.cif` opens a single session with a green gradient. Export the same variables in your shell profile to make that choice persistent.
+
+The pocket comparison used the same public model, camera, and matte lighting for each candidate. In the first round, green ligand carbons approached gray sidechains under a simulated red–green color-vision deficiency. Moving the ligand toward cyan and warming the protein improved their separation. The zinc spheres retain PyMOL’s native lavender. [Color-vision simulation method](https://pubmed.ncbi.nlm.nih.gov/19834201/) · [Original palette gallery](viewer-guide.png)
 
 The named `sc01`–`sc10`, `bb01`–`bb10`, amethyst, Seaborn, and RFdiffusion palettes are available to existing scripts. `color_palette` applies the original per-object foliage cycle, alignment, and ligand shell. The three `color_bb_rfdiffusion*` commands apply residue gradients. [Gradient examples](COMMANDS.md) · [Original foliage render](foliage-original.png)
 

@@ -6,7 +6,7 @@ _pymolrc_root = _Path(__script__).expanduser().resolve().parent
 if not (_pymolrc_root / "config/display.pml").is_file():
     _pymolrc_root = _Path(_os.environ.get("PYMOLRC_ROOT", "~/pymolrc")).expanduser()
 for _part in ("config/display.pml", "show_termini.py", "rfd3_movie_kit.pml",
-              "crystallography/crystal_kit.pml", "config/themes.py", "config/bonds.py",
+              "crystallography/crystal_kit.pml", "scripts/pymol_components.py", "config/themes.py", "config/bonds.py",
               "config/session.py", "config/rendering.py", "config/help.py", "rfd4_viewer.py"):
     cmd.run(str(_pymolrc_root / _part))
 python end

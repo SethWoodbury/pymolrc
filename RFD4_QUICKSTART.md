@@ -15,12 +15,13 @@ The reader recognizes declared condition fields in `.cif`, `.mmcif`, and their g
 | Ochre cartoon, gold beads | Absolute coordinates are fixed |
 | Lilac cartoon and beads | The group’s internal geometry is fixed. Its overall placement is free |
 | Blue cartoon | Reference backbone with free coordinates |
+| Element-colored sphere | A metal ion, including a reference ion when context is visible |
 | Thin lines or crosses | Reference ligand atoms and disconnected fragments |
 | Labeled translucent pink sphere | A chain-centroid target supplied in the CIF |
 
 A cartoon follows the mask on its alpha carbon. A residue can contain a mixture of fixed and free atoms. Use its beads or named selections for an atom-level readout. The stick color reports chemistry, including bright orange phosphorus, blue nitrogen, red oxygen, and yellow sulfur in the default palette. In chemical coloring modes, protein carbons are lighter when every retained atom in the residue has free sequence identity.
 
-On proteins with at least 40 absolute-target alpha carbons, continuous, fully fixed residues use the ochre cartoon alone. Partial residues, internal groups, termini, ligands, and isolated targets keep their atom detail. Nonmetal beads default to `fixed_scale=0.16`. Metal spheres inherit PyMOL’s global `sphere_scale`. A new inspection starts with residue labels off.
+On proteins with at least 40 absolute-target alpha carbons, continuous, fully fixed residues use the ochre cartoon alone. Partial residues, internal groups, termini, ligands, and isolated targets keep their atom detail. Nonmetal beads default to `fixed_scale=0.16`. In the default chemical view, absolute, internal, and reference metal ions are spheres with their element colors and PyMOL’s global `sphere_scale`. The named selections report each metal’s constraint. A new inspection starts with residue labels off.
 
 ```pml
 rfd4_style motif, coordinates, markers=all

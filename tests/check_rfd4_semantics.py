@@ -25,7 +25,7 @@ def run_checks():
     absolute = sum(a['fixed'] for a in data['atoms'])
     internal = sum(a['internal'] for a in data['atoms'])
     assert cmd.count_atoms('motif and polymer and rep cartoon') > 0
-    assert cmd.count_atoms('motif_reference and rep spheres') == 0
+    assert cmd.count_atoms('motif_reference and not metals and rep spheres') == 0
     markers = []
     cmd.iterate('motif_absolute and rep spheres and not metals',
                 'out.append((s.sphere_color, s.sphere_scale))', space={'out': markers})
@@ -106,6 +106,17 @@ def run_checks():
         assert cmd.get_view() == camera
         cmd.keyword['structure_next'][0]()
         assert {o: appearance(o) for o in cmd.get_object_list()} == before
+        def condition_ribbons():
+            values = []
+            cmd.iterate('motif and name CA', 'out.append(s.cartoon_color)', space={'out': values})
+            return values
+        saved_ribbons = condition_ribbons()
+        cmd.do('theme fern, gradient=on')
+        cmd.do('ligand_colors by_type')
+        cmd.do('style_all')
+        assert appearance('motif') == before['motif'] and condition_ribbons() == saved_ribbons
+        cmd.do('theme mineral, gradient=off')
+        cmd.do('ligand_colors uniform')
         # Native parser resolves an explicit coordinate group independently of
         # sequence constraints and absent internal-coordinate payloads.
         from Bio.PDB.MMCIF2Dict import MMCIF2Dict
@@ -153,15 +164,16 @@ def run_checks():
         record = dict(data['atoms'][0])
         record.update(name=atom.name, element=atom.symbol, resn=atom.resn, resi=atom.resi,
                       chain=atom.chain, coord=atom.coord, hetero=True, pymol_index=atom.index,
-                      fixed=atom.symbol == 'Zn', internal=atom.symbol == 'Mg')
+                      fixed=atom.symbol == 'Zn', internal=atom.symbol == 'Mg',
+                      hbond='BOTH' if atom.symbol == 'Mg' else 'NONE')
         records.append(record)
     cmd._rfd4_viewer_state['objects']['metal_conditions'] = {'atoms': records, 'centroids': [], 'centroid_indices': []}
     normal_scale = cmd.get_setting_float('sphere_scale')
     cmd.set('sphere_scale', 0.91)
     style = cmd.keyword['rfd4_style'][0]
     style('metal_conditions', 'coordinates', labels=0)
-    assert cmd.count_atoms('metal_conditions and rep spheres') == 2
-    assert cmd.count_atoms('metal_conditions and elem Fe and rep spheres') == 0
+    assert cmd.count_atoms('metal_conditions and rep spheres') == 3
+    assert cmd.count_atoms('metal_conditions and elem Fe and rep spheres') == 1
     assert cmd.count_atoms('metal_conditions and elem Fe and rep nonbonded') == 1
     sizes = []
     cmd.iterate('metal_conditions and (elem Zn or elem Mg)', 'out.append(s.sphere_scale)', space={'out': sizes})
@@ -170,19 +182,25 @@ def run_checks():
     sizes = []
     cmd.iterate('metal_conditions and (elem Zn or elem Mg)', 'out.append(s.sphere_scale)', space={'out': sizes})
     assert all(abs(x - 0.83) < 1e-6 for x in sizes), sizes
-    for status, color in [('absolute', 'rfd4_gold'), ('internal', 'rfd4_lilac')]:
+    for status, color in [('absolute', 'zinc'), ('internal', 'magnesium'), ('reference', 'iron')]:
         spheres = []
-        cmd.iterate('metal_conditions_' + status, 'out.append(s.sphere_color)', space={'out': spheres})
-        assert spheres == [cmd.get_color_index(color)]
+        cmd.iterate('metal_conditions_' + status, 'out.append((s.sphere_color, color))', space={'out': spheres})
+        assert spheres == [(-1, cmd.get_color_index(color))]
     style('metal_conditions', 'coordinates', labels=0, element_colors=0)
     assert all(c == cmd.get_color_index('rfd4_lilac') for _, c, _ in appearance('metal_conditions_internal'))
     style('metal_conditions', 'elements', labels=0)
-    assert cmd.count_atoms('metal_conditions and rep spheres') == 2
+    assert cmd.count_atoms('metal_conditions and rep spheres') == 3
     style('metal_conditions', 'elements', labels=0, context=1)
-    assert cmd.count_atoms('metal_conditions and rep spheres') == 2
+    assert cmd.count_atoms('metal_conditions and rep spheres') == 3
     assert cmd.count_atoms('metal_conditions_reference and rep nonbonded') == 1
     style('metal_conditions', 'elements', labels=0, context=0)
     assert cmd.count_atoms('metal_conditions_reference and (rep nonbonded or rep lines or rep spheres)') == 0
+    for chemical in (1, 0):
+        style('metal_conditions', 'hbond', element_colors=chemical)
+        face = []
+        cmd.iterate('metal_conditions and elem Mg', 'out.append((color, s.sphere_color))', space={'out': face})
+        expected = cmd.get_color_index('magnesium') if chemical else -1
+        assert face == [(cmd.get_color_index('magenta'), expected)]
     cmd.set('sphere_scale', normal_scale)
     assert hashlib.sha256(source.read_bytes()).hexdigest() == digest
     print('RFD4_SEMANTICS_TEST_PASS', flush=True)
