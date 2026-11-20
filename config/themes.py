@@ -1,17 +1,19 @@
 """Named molecular palettes and the interactive PyMOL theme command."""
 from pymol import cmd
 
-# Sidechain carbon, backbone carbon, ligand carbon. Foliage uses the original
-# named colors so personal overrides of those names still work.
+# Sidechain carbon, backbone carbon, ligand carbon. Both green themes refer to
+# the user's original color names so manual set_color overrides still work.
+_FOLIAGE_CARBONS = ("sc05", "bb05", "lig_amethyst3")
 _PYMOLRC_THEMES = {
+    "classic": _FOLIAGE_CARBONS,
     "fjord": ("fjord_mint", "fjord_teal", "fjord_lilac"),
     "clay": ("clay_peach", "clay_terracotta", "clay_aqua"),
     "iris": ("iris_lavender", "iris_violet", "iris_jade"),
-    "foliage": ("sc05", "bb05", "lig_amethyst3"),
+    "foliage": _FOLIAGE_CARBONS,
 }
 _SOFT_ELEMENTS = {"N": "elemN", "O": "elemO", "S": "elemS", "P": "elemP", "H": "elemH"}
 if not hasattr(cmd, "_pymolrc_theme"):
-    cmd._pymolrc_theme = "fjord"
+    cmd._pymolrc_theme = "classic"
 
 
 def _color_structure(selection, _self=cmd, carbons=None, palette=None):
@@ -31,13 +33,15 @@ def _color_structure(selection, _self=cmd, carbons=None, palette=None):
 
 
 def theme(name="list", _self=cmd):
-    """theme [list|next|prev|fjord|clay|iris|foliage]. Applies to open and future structures."""
+    """theme [list|next|prev|classic|fjord|clay|iris|foliage]. Applies to open and future structures."""
     names = list(_PYMOLRC_THEMES)
     current = _self._pymolrc_theme
     name = str(name).lower().strip()
     if name in ("", "list"):
         for key, colors in _PYMOLRC_THEMES.items():
-            print((" * " if key == current else "   ") + key + "  " + " / ".join(colors))
+            elements = "soft" if key == "foliage" else "standard"
+            print((" * " if key == current else "   ") + key + "  " + " / ".join(colors)
+                  + "  (" + elements + " element colors)")
         return current
     if name in ("next", "prev"):
         step = 1 if name == "next" else -1

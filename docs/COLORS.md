@@ -1,17 +1,18 @@
 # Molecular palettes
 
-Type `theme next` or `theme prev` in PyMOL to cycle through the four looks. `theme list` marks the active one. Selecting a palette changes the open structures and sets the colors for subsequent loads in the session. The camera stays in place.
+Type `theme next` or `theme prev` in PyMOL to cycle through the palettes. `theme list` marks the active one. Selecting a palette changes the open structures and sets the colors for subsequent loads in the session. All palettes share the original matte lighting, orthographic camera, and black outlines on ray renders.
 
 ![The same molecular view in each palette and a synthetic coordinate mask](viewer-guide.png)
 
 | Theme | Sidechain carbon | Backbone carbon | Ligand carbon |
 |---|---|---|---|
-| `fjord` (default) | Mint `#8CCBC3` | Teal `#559EAA` | Lilac `#BE97DD` |
+| `classic` (default) | Sage `sc05` | Forest `bb05` | Amethyst `lig_amethyst3` |
+| `fjord` | Mint `#8CCBC3` | Teal `#559EAA` | Lilac `#BE97DD` |
 | `clay` | Peach `#E4BAA4` | Terracotta `#BD8579` | Aqua `#7BBCC5` |
 | `iris` | Lavender `#B8ACE0` | Violet `#9283C2` | Jade `#7BC7A5` |
 | `foliage` | Sage `sc05` | Forest `bb05` | Amethyst `lig_amethyst3` |
 
-Fjord, Clay, and Iris use PyMOL’s stock element colors, including blue nitrogen, red oxygen, yellow sulfur, and bright orange phosphorus (`#FF8000`). Foliage restores the original soft element palette. The older custom RGB that previously replaced PyMOL’s built-in `nitrogen` is available as `legacy_nitrogen`.
+Classic, Fjord, Clay, and Iris use PyMOL’s stock element colors, including blue nitrogen, red oxygen, yellow sulfur, and bright orange phosphorus (`#FF8000`). Foliage uses the same protein and ligand colors as Classic with the original soft element palette. The older custom RGB that previously replaced PyMOL’s built-in `nitrogen` is available as `legacy_nitrogen`.
 
 The named `sc01`–`sc10`, `bb01`–`bb10`, amethyst, Seaborn, and RFdiffusion palettes are available to existing scripts. `color_palette` applies the original per-object foliage cycle, alignment, and ligand shell. The three `color_bb_rfdiffusion*` commands apply residue gradients. [Gradient examples](COMMANDS.md) · [Original foliage render](foliage-original.png)
 

@@ -19,6 +19,12 @@ def check():
     assert state["autoload"] == detail
     style = cmd.keyword["rfd4_style"][0]
     theme = cmd.keyword["theme"][0]
+    assert theme("list") == "classic"
+    for setting, expected in {"specular": 0, "ray_shadow": 0, "ray_trace_mode": 1,
+                              "power": 0.2, "ambient": 0.4, "direct": 0.45,
+                              "reflect": 1, "reflect_power": 0, "orthoscopic": 1,
+                              "cartoon_fancy_helices": 1, "cartoon_fancy_sheets": 1}.items():
+        assert math.isclose(cmd.get_setting_float(setting), expected, abs_tol=1e-6), setting
     with tempfile.TemporaryDirectory() as directory:
         source = Path(directory) / "a structure.cif"
         data = fixture()
@@ -50,7 +56,7 @@ def check():
         style("sample", fixed_scale=0.12, fixed_color="yellow")
         cmd.hide("sticks", "sample_fixed")
         camera = cmd.get_view()
-        assert theme("next") == "clay" and theme("prev") == "fjord"
+        assert theme("next") == "fjord" and theme("prev") == "classic"
         assert cmd.get_view() == camera
         assert cmd.count_atoms("sample_fixed and rep sticks") == 0
         assert state["objects"]["sample"]["style"]["fixed_color"] == "yellow"
@@ -71,7 +77,12 @@ def check():
         write_dict(source, data)
         cmd.load(str(source), "ordinary")
         assert cmd.count_atoms("ordinary") == 8 and "ordinary" not in state["objects"]
-        assert all(map(math.isfinite, cmd.get_view()))
+        backbone = []
+        cmd.iterate("ordinary and polymer.protein and name CA", "out.append(color)", space={"out": backbone})
+        assert backbone and set(backbone) == {cmd.get_color_index("bb05")}
+        view = cmd.get_view()
+        assert all(map(math.isfinite, view))
+        assert all(math.isclose(a, b, abs_tol=1e-4) for a, b in zip(view[12:15], (4, 0, 0)))
         assert not any("pymolrc_finite" in n for n in cmd.get_names("all"))
         chem = Path(directory) / "elements.pdb"
         symbols = ("N", "O", "S", "P", "H")
@@ -79,7 +90,7 @@ def check():
             f"HETATM{i:5} {sym:>4} LIG A   1    {i * 4:8.3f}{0.:8.3f}{0.:8.3f}  1.00 10.00          {sym:>2}\n"
             for i, sym in enumerate(symbols, 1)) + "END\n")
         cmd.load(str(chem), "chem")
-        for palette in ("fjord", "clay", "iris", "foliage"):
+        for palette in ("classic", "fjord", "clay", "iris", "foliage"):
             theme(palette)
             for sym, stock in zip(symbols, ("nitrogen", "oxygen", "sulfur", "phosphorus", "hydrogen")):
                 colors = []

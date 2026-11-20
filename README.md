@@ -2,9 +2,11 @@
 
 Open a structure with `pymol`. Use `pymolrfd4` to inspect coordinate and sequence annotations in RFdiffusion4-Proteina CIFs. Both commands accept the usual PyMOL flags and multiple files.
 
-![Coordinate constraints on a protein cartoon alongside the Fjord, Clay, Iris, and Foliage color schemes](docs/viewer-guide.png)
+![Coordinate constraints on a protein cartoon alongside the Classic, Fjord, Clay, and Iris carbon palettes](docs/viewer-guide.png)
 
 The left panel uses illustrative masks on backbone coordinates from the bundled example. The four palette previews use the same structure and camera.
+
+Ordinary structures open with the original matte green cartoons and amethyst ligand carbons. Ray-traced images have black outlines. Nitrogen is blue, oxygen red, sulfur yellow, and phosphorus bright orange.
 
 ## Install
 
@@ -29,10 +31,13 @@ pymolrfd4 prediction.cif annotated.cif -d 'set grid_mode, 1'
 
 The second command places the two structures side by side. The prediction keeps its molecular palette. The annotated structure shows absolute coordinate targets in ochre with gold beads, internal groups in lilac, and reference backbone in blue. Sticks retain chemical element colors. Inside an ordinary session, `rfd4_load annotated.cif, motif` opens one annotated copy.
 
+For a large batch, put one structure path per line in `models.txt` and run `pymolrfd4 -d 'browse_list models.txt'`. All structures are loaded, the first is shown, and Page Up and Page Down switch between them. Passing the paths directly to `pymolrfd4` displays them together.
+
 | In PyMOL | Action |
 |---|---|
 | `theme next`, `theme prev` | Preview the next or previous palette on open structures |
-| `theme foliage` | Restore foliage greens, amethyst ligands, and soft element colors |
+| `theme classic` | Return to the startup colors |
+| `theme foliage` | Use the same greens and amethyst with the original soft element colors |
 | `rfd4_style , coordinates, markers=all` | Show every coordinate-conditioned atom as a small sphere |
 | `rfd4_style , sequence` | Inspect fixed and free residue identities |
 | `rfd4_style , legacy` | Use the original cyan/orange atom view and reference lines |

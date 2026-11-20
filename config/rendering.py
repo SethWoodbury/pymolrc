@@ -1,8 +1,6 @@
 """Structure palettes, publication rendering and ball-and-stick views."""
 from pymol import cmd
 
-_DEFAULT_SPECULAR = cmd.get_setting_float("specular")
-_DEFAULT_SHININESS = cmd.get_setting_float("shininess")
 
 def publication_ray_trace(filename="publication_ray.png", width=3200, height=2400,
                           dpi=300, transparent=0, _self=cmd):

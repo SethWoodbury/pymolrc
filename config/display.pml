@@ -1,21 +1,21 @@
 # Environment
 cmd.space('rgb')
 
-# Rendering and lighting
-set specular, 0.18
-set shininess, 22
-set ray_shadow, on
-set ray_trace_mode, 0
+# Original matte cartoon lighting and black outlines on ray-traced images.
+set specular, 0
+unset shininess
+set ray_shadow, off
+set ray_trace_mode, 1
 set ray_trace_disco_factor, 1
 set ray_trace_gain, 0.1
 set ray_trace_color, black
 set ray_texture, 0
 set antialias, 2
-set power, 1
-set ambient, 0.34
-set direct, 0.56
-set reflect, 0.32
-set reflect_power, 1.5
+set power, 0.2
+set ambient, 0.4
+set direct, 0.45
+set reflect, 1
+set reflect_power, 0
 set cartoon_sampling, 10
 
 # Structure display

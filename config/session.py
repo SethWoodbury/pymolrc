@@ -666,7 +666,7 @@ def _restore_finite_view(previous, new, had_objects):
     try:
         for obj in new:
             indices = []
-            cmd.iterate_state(1, obj, "if finite(x) and finite(y) and finite(z): keep.append(index)",
+            cmd.iterate_state(1, obj, "keep.append(index) if finite(x) and finite(y) and finite(z) else None",
                               space={"finite": math.isfinite, "keep": indices})
             if indices:
                 name = cmd.get_unused_name("_pymolrc_finite")
