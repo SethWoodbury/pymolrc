@@ -1,5 +1,6 @@
 """Portable fast-reader guards plus opt-in real native E/D/internal parity."""
 from copy import deepcopy
+import gzip
 import hashlib
 import os
 from pathlib import Path
@@ -150,6 +151,89 @@ class FastReaderTests(unittest.TestCase):
         d = fixture(); d['_atom_site.pdbx_formal_charge'][3] = '-1'
         self.assertEqual(self.parse(d)['atoms'][3]['charge'], -1)
 
+    def test_completed_output_columns_gzip_and_missing_charge(self):
+        d = fixture()
+        d['_atom_site.condition_sequence-probability-GLY_1_residue'] = ['0.5'] * 8
+        d['_atom_site.annotation_src-component_1_residue'] = ['source A'] * 8
+        d['_atom_site.pdbx_formal_charge'][0] = '?'
+        d['_chem_comp_atom.charge'][0] = '1'
+        model = self.parse(d)
+        self.assertEqual(model['atoms'][0]['charge'], 0)
+        self.assertIn('condition_sequence-probability-GLY_1_residue', model['condition_fields'])
+        compressed = self.path.with_suffix('.mmcif.gz')
+        compressed.write_bytes(gzip.compress(self.path.read_bytes()))
+        result = fast.export_model(compressed)
+        self.assertEqual({**result, 'source': model['source']}, model)
+
+    def test_explicit_disulfide_and_symmetry_fallback(self):
+        d = fixture()
+        for key, values in d.items():
+            if isinstance(values, list):
+                d[key] = ['CYS' if x == 'GLY' else x for x in values]
+        for key in ('_atom_site.label_atom_id', '_atom_site.auth_atom_id', '_chem_comp_atom.atom_id',
+                    '_chem_comp_bond.atom_id_1', '_chem_comp_bond.atom_id_2'):
+            d[key] = [{'C': 'CB', 'O': 'SG'}.get(x, x) for x in d[key]]
+        for key in ('_atom_site.type_symbol', '_chem_comp_atom.type_symbol'):
+            d[key] = ['S' if x == 'O' else x for x in d[key]]
+        d['_chem_comp_bond.value_order'][-1] = 'SING'
+        d.update({'_struct_conn.id': ['1'], '_struct_conn.conn_type_id': ['covale'],
+                  '_struct_conn.pdbx_value_order': ['sing']})
+        for partner in (1, 2):
+            prefix = '_struct_conn.ptnr%d_' % partner
+            for tag, value in [('asym_id', 'A'), ('seq_id', str(partner)), ('comp_id', 'CYS'), ('atom_id', 'SG')]:
+                d[prefix + 'label_' + tag] = [value]
+            d[prefix + 'symmetry'] = ['1_555']
+        self.assertIn([3, 7, 1], self.parse(d)['bonds'])
+        d['_struct_conn.ptnr2_symmetry'] = ['2_555']
+        with self.assertRaises(fast.UnsupportedCIF):
+            self.parse(d)
+
+    def test_single_atom_ions_and_water_retain_charge_and_have_no_bonds(self):
+        for comp, atom, element, charge, entity in [('ZN', 'ZN', 'ZN', '+2', 'non-polymer'),
+                                                  ('HOH', 'O', 'O', '?', 'water')]:
+            d = fixture()
+            for key, values in d.items():
+                if key.startswith(('_atom_site.', '_condition_')):
+                    del values[5:]
+            for key, value in [('label_entity_id', '2'), ('group_PDB', 'HETATM'), ('type_symbol', element),
+                               ('pdbx_formal_charge', charge), ('condition_sequence_1_residue', '<M>')]:
+                d['_atom_site.' + key][-1] = value
+            for prefix in ('label_', 'auth_'):
+                for tag, value in [('comp_id', comp), ('atom_id', atom), ('asym_id', 'B')]:
+                    d['_atom_site.' + prefix + tag][-1] = value
+            for key, value in [('_entity.id', '2'), ('_entity.type', entity), ('_chem_comp.id', comp),
+                               ('_chem_comp.type', 'NON-POLYMER'), ('_chem_comp_atom.comp_id', comp),
+                               ('_chem_comp_atom.atom_id', atom), ('_chem_comp_atom.type_symbol', element),
+                               ('_chem_comp_atom.charge', '0')]:
+                d[key].append(value)
+            model = self.parse(d)
+            self.assertTrue(model['atoms'][-1]['hetero'])
+            self.assertEqual(model['atoms'][-1]['charge'], 2 if comp == 'ZN' else 0)
+            self.assertEqual(len(model['bonds']), 3)
+
+    def test_modified_peptide_needs_standard_attachment_atoms_in_its_template(self):
+        d = fixture()
+        for key, values in d.items():
+            if isinstance(values, list):
+                d[key] = ['XAA' if x == 'GLY' else x for x in values]
+        self.assertEqual(len(self.parse(d)['bonds']), 7)
+        d['_chem_comp_atom.atom_id'][0] = 'NT'
+        with self.assertRaisesRegex(fast.UnsupportedCIF, 'attachment'):
+            self.parse(d)
+
+    def test_fast_table_preserves_multiline_literals_and_wrapped_rows(self):
+        d = fixture()
+        d['_entry.details'] = ['text\n#\nloop_\n_atom_site.fake\nquoted content']
+        original = self.parse(d)
+        text = self.path.read_text()
+        # One loop row can legally occupy two physical lines.
+        lines = text.splitlines(keepends=True)
+        i = next(i for i, line in enumerate(lines) if line.startswith('ATOM '))
+        first, rest = lines[i].split(None, 1)
+        lines[i] = first + '\n' + rest
+        self.path.write_text(''.join(lines))
+        self.assertEqual(fast.export_model(self.path), original)
+
     def test_centroids_preserve_zero_and_absence(self):
         self.assertEqual(self.parse(fixture())['centroids'], [])
         for xyz, expected in (([float('nan')] * 3, []),
@@ -167,6 +251,15 @@ class FastReaderTests(unittest.TestCase):
         self.assertEqual({a['chain'] for a in parsed['atoms']}, {'A'})
         self.assertEqual(parsed['centroids'], [{'chain': 'A', 'xyz': [0, 1, 2]},
                                               {'chain': 'B', 'xyz': [0, 1, 2]}])
+
+    def test_centroid_serialization_aliases_match(self):
+        d = fixture()
+        set_centroids(d, [0, 1, 2])
+        expected = self.parse(d)
+        new = {k.replace('ChainCentroid_1_atom', 'ChainCentroid_1_chain'): v for k, v in d.items()}
+        self.assertEqual(self.parse(new), expected)
+        with self.assertRaises(fast.UnsupportedCIF):
+            self.parse({**d, **new})
 
     def test_centroids_reject_partial_conflicting_and_infinite_targets(self):
         for value in ('nan', 'inf', '9'):
@@ -221,6 +314,7 @@ class NativeParityTests(unittest.TestCase):
                     variants.append(absent)
                     variant = deepcopy(d)
                     first_chain = variant['_atom_site.label_asym_id'][0]
+                    set_centroids(variant, [0, 1, 2])
                     variant['_atom_site.occupancy'] = ['0' if chain == first_chain else occupancy
                         for chain, occupancy in zip(variant['_atom_site.label_asym_id'], variant['_atom_site.occupancy'])]
                     excluded = Path(directory) / 'excluded_chain.cif'; write_dict(excluded, variant)

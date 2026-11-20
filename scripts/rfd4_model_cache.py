@@ -262,6 +262,8 @@ def write_cached(source_hash, reader, model, directory=None):
     model.pop("coordinate_selections_created", None)
     model.pop("centroid_indices", None)
     model.pop("show_centroids", None)
+    model.pop("style", None)
+    model.pop("selection_names", None)
     directory = Path(directory or cache_root())
     path = cache_path(source_hash, reader["sha256"], directory)
     _atomic_json(path, {"schema": SCHEMA, "source_sha256": source_hash, "reader_sha256": reader["sha256"],

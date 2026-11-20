@@ -1,8 +1,8 @@
 """Headless loading timings (exclude process/GUI startup and rendering).
 
 RFD4_TIMING_SOURCE=/path/input.cif RFD4_TIMING_PML=/path/view.pml \
-  pymol -cq -r tests/benchmark_rfd4_loading.py
-Optional RFD4_TIMING_OUTPUT writes JSON; source files are never modified.
+  pymolrfd4 -cq -r tests/benchmark_rfd4_loading.py
+Use pymol for ordinary mode. Optional RFD4_TIMING_OUTPUT writes JSON; source files are never modified.
 Explicit RFD4_REPO forces the native reader/cache for comparison.
 """
 import hashlib
@@ -15,11 +15,12 @@ from pymol import cmd
 source = Path(os.environ['RFD4_TIMING_SOURCE']).resolve(strict=True)
 pml = Path(os.environ['RFD4_TIMING_PML']).resolve(strict=True) if os.environ.get('RFD4_TIMING_PML') else None
 results = []
-for mode in (('annotated', 'pml', 'combined') if pml else ('annotated',)):
+route = 'inspect' if cmd._rfd4_viewer_state['autoload'] else 'ordinary'
+for mode in ((route, 'pml', 'combined') if pml else (route,)):
     for repeat in range(3):
         cmd.delete('all')
         started = time.perf_counter()
-        if mode in ('annotated', 'combined'):
+        if mode in (route, 'combined'):
             cmd.load(str(source), 'input_motif')
         if mode in ('pml', 'combined'):
             cmd.do('@' + str(pml))

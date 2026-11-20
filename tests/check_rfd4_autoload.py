@@ -1,4 +1,4 @@
-"""Run inside PyMOL: RFD4_VIEW_TEST_DIR=/tmp/inputs pymol -cq -r this_file.
+"""Run inside PyMOL: RFD4_VIEW_TEST_DIR=/tmp/inputs pymolrfd4 -cq -r this_file.
 
 Uses temporary copies of supplied CIFs. Checks CLI inputs (if provided), native
 geometry/bonds, normal PDB/CIF passthrough, repeated helper runs and batch browsing.
@@ -32,6 +32,8 @@ def check_model(obj):
     actual_bonds = {(frozenset((actual_keys[b.index[0]], actual_keys[b.index[1]])), b.order) for b in model.bond}
     assert expected_bonds == actual_bonds
     assert all(math.isfinite(v) for corner in cmd.get_extent(obj) for v in corner)
+    assert cmd.count_atoms(obj + '_reference and not metals and (rep sticks or rep spheres)') == 0
+    cmd.keyword['rfd4_style'][0](obj, markers='all', labels=0)
     assert cmd.count_atoms('model ' + obj + ' and rep sticks') == sum(a['fixed'] or a['internal'] for a in data['atoms'])
 
 
@@ -54,7 +56,8 @@ def run_checks():
         assert worker is None, 'Prewarmed inputs must not start a native reader.'
         assert cmd._rfd4_viewer_state['cache_stats']['disk_hits'] >= 1
     atom_count = cmd.count_atoms('motif')
-    cmd.run(str(Path.home() / 'pymolrc/rfd4_viewer.py'))
+    viewer = Path(cmd.keyword['rfd4_load'][0].__code__.co_filename)
+    cmd.run(str(viewer))
     assert 'motif' in cmd._rfd4_viewer_state['objects']
     worker = cmd._rfd4_viewer_state['worker']
     assert (worker.pid if worker is not None else None) == worker_pid

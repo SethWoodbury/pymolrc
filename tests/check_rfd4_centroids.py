@@ -1,6 +1,6 @@
 """Headless centroid-marker checks; RFD4_SEMANTICS_SOURCE supplies an annotated CIF.
 
-pymol -cq -r tests/check_rfd4_centroids.py
+pymolrfd4 -cq -r tests/check_rfd4_centroids.py
 No private fixture is bundled; temporary variants never change the source.
 """
 import hashlib
