@@ -4,8 +4,8 @@ Reference notes for building Figure-1-style stills and storyboard movies from
 an RFdiffusion3 (RFd3) enzyme-design diffusion trajectory, on top of
 `rfd3_movie()` (loading/gradient/defer-builds) and `style_fixed()` /
 `apply_camera()` / `draw_connectors()` / `catalytic_sel_from_motif()` /
-`add_custom_bond()` (all in `.pymolrc`, see the command reference in the main
-README). Each item below cost real debugging time — read this before
+`add_custom_bond()` (loaded at startup from the [standalone movie kit](../rfd3_movie_kit.pml)).
+See the [command reference](COMMANDS.md). Each item below cost real debugging time — read this before
 re-discovering any of them the hard way.
 
 ## 1. `reverse=1` flips FRAMES, not STATES

@@ -4,7 +4,10 @@ Unknown schemas or chemistry raise UnsupportedCIF: the caller must use the nativ
 reader. This is only a disposable viewer derivative, never an inference parser.
 """
 from collections import defaultdict
+import gzip
+import io
 import math
+import re
 from pathlib import Path
 
 
@@ -13,13 +16,25 @@ class UnsupportedCIF(ValueError):
 
 
 _AA = set("ALA ARG ASN ASP CYS GLN GLU GLY HIS ILE LEU LYS MET PHE PRO SER THR TRP TYR VAL".split())
+_PEPTIDES = {"L-PEPTIDE LINKING", "PEPTIDE LINKING"}
+_IONS = set("ZN FE MG MN CU CO NI CA NA K CD".split())
 _SCALARS = {
     "condition_sequence_1_residue", "condition_index_1_residue",
     "condition_rasa-binned_1_atom", "condition_hbond_1_atom",
     "condition_pistack_1_atom", "condition_index-group_1_token",
     "condition_CoordinateGroup_1_atom",
-}
-_VECTORS = {"condition_coordinate_1_atom", "condition_ChainCentroid_1_atom", "condition_InternalCoordinate_1_atom"}
+} | {"condition_sequence-probability-" + base + "_1_residue"
+     for base in _AA | {"A", "C", "G", "U", "DA", "DC", "DG", "DT"}}
+_ANNOTATIONS = {"annotation_expsegmin_1_residue", "annotation_expsegmax_1_residue",
+                "annotation_src-coordinate-conditioned-region_1_atom",
+                "annotation_src-component_1_residue", "annotation_src-index-group_1_atom"}
+_CENTROID_FIELDS = ("condition_ChainCentroid_1_chain", "condition_ChainCentroid_1_atom")
+_VECTORS = {"condition_coordinate_1_atom", "condition_InternalCoordinate_1_atom", *_CENTROID_FIELDS}
+
+
+def canonical_condition_fields(names):
+    """Report the same names with older and newer native condition registries."""
+    return sorted({_CENTROID_FIELDS[0] if name in _CENTROID_FIELDS else name for name in names})
 
 
 def centroid_targets(chains, coordinates):
@@ -59,11 +74,23 @@ def export_model(filename):
         raise UnsupportedCIF(str(error)) from error
 
 
-def _export_model(filename):
-    import numpy as np
+# Only rectangular loops of bare values qualify. Any CIF syntax with quoting,
+# text, comments, control tokens or wrapped rows stays with the general parser.
+_TABLE_TAG = re.compile(r"_[\w-]+\.[\w-]+$")
+
+
+def _bare_table(lines):
+    # Fast substring checks in C. A conservative match simply hands the
+    # whole loop to Bio.PDB, including quoted values containing these words.
+    raw = "\n" + "".join(lines).lower()
+    syntax = ("'", '"', "#", ";", "$", " _", "\t_", "\n_", "\r_",
+              "\v", "\f", "loop_", "stop_", "data_", "save_", "global_")
+    return not any(token in raw for token in syntax)
+
+
+def _read_columns(path):
     from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 
-    path = Path(filename).expanduser().resolve(strict=True)
     class UniqueFields(MMCIF2Dict):
         def __setitem__(self, key, value):
             if key in self:
@@ -80,14 +107,56 @@ def _export_model(filename):
             if blocks != 1:
                 raise UnsupportedCIF("Exactly one CIF block is required")
 
-    data = UniqueFields(str(path))
+    small = []
+    columns = {}
+
+    def consume(lines):
+        if len(lines) > 2 and lines[0].strip() == "loop_" and _TABLE_TAG.fullmatch(lines[1].strip()):
+            end = 1
+            while end < len(lines) and _TABLE_TAG.fullmatch(lines[end].strip()):
+                end += 1
+            tags = [line.strip() for line in lines[1:end]]
+            body = lines[end:]
+            if body and _bare_table(body):
+                rows = [row.split() for row in body]
+                if all(len(row) == len(tags) for row in rows):
+                    columns.update(zip(tags, map(list, zip(*rows))))
+                    # Keep one row so duplicate tags and block boundaries are
+                    # still validated by the same parser as every other field.
+                    small.extend(lines[:end + 1])
+                    return
+        small.extend(lines)
+
+    opener = gzip.open if path.suffix.lower() == ".gz" else open
+    with opener(path, "rt", encoding="utf-8") as handle:
+        block = []
+        in_text = False
+        for line in handle:
+            if line.startswith(";"):
+                in_text = not in_text
+            if not in_text and line.strip() == "#":
+                consume(block)
+                small.append(line)
+                block.clear()
+            else:
+                block.append(line)
+        consume(block)
+    data = UniqueFields(io.StringIO("".join(small)))
+    data.update(columns)
+    return data
+
+
+def _export_model(filename):
+    import numpy as np
+
+    path = Path(filename).expanduser().resolve(strict=True)
+    data = _read_columns(path)
     for key in data:
         if key.startswith("_atom_site.condition_") and key.split(".", 1)[1] not in _SCALARS:
             raise UnsupportedCIF("Unknown scalar condition")
         if key.startswith("_condition_") and key.split(".", 1)[0][1:] not in _VECTORS:
             raise UnsupportedCIF("Unknown vector condition")
-        if key.startswith("_atom_site.annotation_") and key not in {
-                "_atom_site.annotation_expsegmin_1_residue", "_atom_site.annotation_expsegmax_1_residue"}:
+        if key.startswith("_atom_site.annotation_") and key.split(".", 1)[1] not in _ANNOTATIONS:
             raise UnsupportedCIF("Unknown standard annotation")
 
     count = len(data["_atom_site.id"])
@@ -139,14 +208,18 @@ def _export_model(filename):
             raise UnsupportedCIF("Distinct author and label identities")
     if set(column("pdbx_PDB_ins_code")) - {".", "?"}:
         raise UnsupportedCIF("Insertion codes require native parsing")
+    if set(column("transformation_id", "1")) != {"1"}:
+        raise UnsupportedCIF("Transformed atom instances require native parsing")
     chains, names, residues = column("label_asym_id"), column("label_atom_id"), column("label_comp_id")
     resids = list(map(int, column("label_seq_id")))
     elements = column("type_symbol")
-    if set(elements) - {"C", "N", "O", "P", "S", "F", "Cl", "Br", "I", "X"}:
-        raise UnsupportedCIF("Hydrogens, metals and unfamiliar elements require native parsing")
+    if {e.upper() for e in elements} - ({"C", "N", "O", "P", "S", "F", "CL", "BR", "I", "X"} | _IONS):
+        raise UnsupportedCIF("Hydrogens and unfamiliar elements require native parsing")
     coords = np.asarray([column("Cartn_" + axis) for axis in "xyz"], dtype=np.float32).T
     occupancy = np.asarray(column("occupancy"), dtype=np.float32)
-    charges = list(map(int, column("pdbx_formal_charge")))
+    # Like the native CIF reader, map missing atom-site charges to zero;
+    # a reusable component template can have a different protonation state.
+    charges = [0 if value in {"?", "."} else int(value) for value in column("pdbx_formal_charge")]
     hetero = column("group_PDB")
     if set(hetero) - {"ATOM", "HETATM"}:
         raise UnsupportedCIF("Unknown atom record type")
@@ -172,8 +245,10 @@ def _export_model(filename):
         raise UnsupportedCIF("Unknown condition enum")
     if any(key.startswith("_condition_InternalCoordinate_1_atom.") for key in data):
         vector("condition_InternalCoordinate_1_atom")
-    centroids = (centroid_targets(chains, vector("condition_ChainCentroid_1_atom"))
-                 if any(key.startswith("_condition_ChainCentroid_1_atom.") for key in data) else [])
+    centroid_fields = [field for field in _CENTROID_FIELDS if any(key.startswith("_" + field + ".") for key in data)]
+    if len(centroid_fields) > 1:
+        raise UnsupportedCIF("Multiple serializations of chain centroids")
+    centroids = centroid_targets(chains, vector(centroid_fields[0])) if centroid_fields else []
     keep = np.isfinite(coords).all(axis=1) & (occupancy > 0) & ~segment
     if not keep.any():
         raise UnsupportedCIF("No physical atoms")
@@ -191,20 +266,32 @@ def _export_model(filename):
     entity_types = dict(zip(data["_entity.id"], data["_entity.type"]))
     polymer_types = dict(zip(data["_entity_poly.entity_id"], data["_entity_poly.type"]))
     entities = column("label_entity_id")
+    peptide_components = {comp for comp, kind in component_types.items() if kind.upper() in _PEPTIDES}
+    for comp in peptide_components - _AA:
+        if any(template_atoms.get((comp, name), (None,))[0] != name for name in ("C", "N")):
+            raise UnsupportedCIF("Nonstandard peptide attachment atoms require native parsing")
+    template_sizes = defaultdict(int)
+    for comp, name in template_atoms:
+        template_sizes[comp] += 1
     for i in range(count):
         if not segment[i] and (residues[i], names[i]) not in template_atoms:
             raise UnsupportedCIF("Missing local atom template")
         ctype = component_types[residues[i]].upper()
-        if not segment[i] and ctype != "NON-POLYMER" and residues[i] not in _AA:
-            raise UnsupportedCIF("Noncanonical polymer chemistry")
+        if not segment[i] and ctype != "NON-POLYMER" and residues[i] not in peptide_components:
+            raise UnsupportedCIF("Unsupported polymer chemistry")
         # Atom-site charges are authoritative here (native annotated inputs
         # can intentionally differ from the reusable CCD protonation template).
         if not segment[i] and template_atoms[(residues[i], names[i])][0] != elements[i]:
             raise UnsupportedCIF("Atom element differs from local template")
-        if residues[i] in _AA and (ctype not in {"L-PEPTIDE LINKING", "PEPTIDE LINKING"}
-                or entity_types[entities[i]] != "polymer" or polymer_types.get(entities[i]) != "polypeptide(L)"
-                or hetero[i] != "ATOM"):
+        if residues[i] in _AA and (ctype not in _PEPTIDES or hetero[i] != "ATOM"):
             raise UnsupportedCIF("Nonstandard protein component/entity semantics")
+        if residues[i] in peptide_components and (entity_types[entities[i]] != "polymer"
+                or polymer_types.get(entities[i]) != "polypeptide(L)"):
+            raise UnsupportedCIF("Unsupported peptide entity")
+        if not segment[i] and ctype == "NON-POLYMER" and entity_types[entities[i]] == "polymer":
+            raise UnsupportedCIF("Polymer caps require native parsing")
+        if elements[i].upper() in _IONS and (ctype != "NON-POLYMER" or template_sizes[residues[i]] != 1):
+            raise UnsupportedCIF("Only isolated, locally defined ions are supported")
     templates = defaultdict(list)
     template_edges = set()
     for comp, left, right, order in zip(*(data["_chem_comp_bond." + field] for field in ("comp_id", "atom_id_1", "atom_id_2", "value_order"))):
@@ -218,14 +305,19 @@ def _export_model(filename):
     original_to_kept = {int(i): j for j, i in enumerate(np.flatnonzero(keep))}
     atom_lookup = {key: i for i, key in enumerate(identities)}
     bonds = {}
+    valence = defaultdict(int)
 
     def add_bond(i, j, order):
         if i not in original_to_kept or j not in original_to_kept:
             return
         edge = tuple(sorted((original_to_kept[i], original_to_kept[j])))
-        if edge in bonds and bonds[edge] != order:
-            raise UnsupportedCIF("Conflicting bonds")
+        if edge in bonds:
+            if bonds[edge] != order:
+                raise UnsupportedCIF("Conflicting bonds")
+            return
         bonds[edge] = order
+        valence[i] += order
+        valence[j] += order
 
     residue_atoms = {}
     residue_order = []
@@ -239,11 +331,15 @@ def _export_model(filename):
         residue_atoms[key][name] = i
     for key, atoms in residue_atoms.items():
         if any(keep[i] for i in atoms.values()) and key[2] not in templates:
-            raise UnsupportedCIF("Missing local bond template")
+            first = next(iter(atoms.values()))
+            ion_or_water = elements[first].upper() in _IONS or (key[2] == "HOH" and elements[first] == "O")
+            if not ion_or_water or template_sizes[key[2]] != 1:
+                raise UnsupportedCIF("Missing local bond template")
         for left, right, order in templates[key[2]]:
             if left in atoms and right in atoms:
                 add_bond(atoms[left], atoms[right], order)
-    # Physical explicit links require the native valence/link-chemistry machinery.
+    # An identity-symmetry disulfide between two unprotonated cysteines
+    # has unambiguous connectivity. Delegate other explicit link chemistry.
     for row in range(len(data.get("_struct_conn.id", []))):
         indices = []
         for partner in (1, 2):
@@ -251,9 +347,23 @@ def _export_model(filename):
             key = (data[prefix + "asym_id"][row], int(data[prefix + "seq_id"][row]), data[prefix + "comp_id"][row], data[prefix + "atom_id"][row])
             indices.append(atom_lookup[key])
         if all(keep[i] for i in indices):
-            raise UnsupportedCIF("Physical struct_conn requires native parsing")
+            if (data["_struct_conn.conn_type_id"][row] != "covale"
+                    or data["_struct_conn.pdbx_value_order"][row].upper() != "SING"
+                    or any(residues[i] != "CYS" or names[i] != "SG" or elements[i] != "S"
+                           or charges[i] != 0 or valence[i] != 1 for i in indices)
+                    or indices[0] == indices[1]):
+                raise UnsupportedCIF("Explicit link requires native parsing")
+            for partner in (1, 2):
+                for tag, allowed in (("ptnr%d_symmetry", {"1_555"}),
+                                     ("ptnr%d_transformation_id", {"1"}),
+                                     ("pdbx_ptnr%d_PDB_ins_code", {".", "?"}),
+                                     ("pdbx_ptnr%d_label_alt_id", {".", "?"})):
+                    values = data.get("_struct_conn." + tag % partner)
+                    if values is not None and values[row] not in allowed:
+                        raise UnsupportedCIF("Ambiguous link partner")
+            add_bond(*indices, 1)
     for left, right in zip(residue_order, residue_order[1:]):
-        if left[0] != right[0] or left[2] not in _AA or right[2] not in _AA:
+        if left[0] != right[0] or left[2] not in peptide_components or right[2] not in peptide_components:
             continue
         if right[1] <= left[1]:
             raise UnsupportedCIF("Nonincreasing polymer residue numbering")
@@ -262,9 +372,7 @@ def _export_model(filename):
                 raise UnsupportedCIF("Polymer leaving groups require native validation")
             carbon, nitrogen = residue_atoms[left]["C"], residue_atoms[right]["N"]
             if all(i in original_to_kept for i in (carbon, nitrogen)):
-                valences = [sum(order for edge, order in bonds.items() if original_to_kept[i] in edge)
-                            for i in (carbon, nitrogen)]
-                if charges[carbon] != 0 or charges[nitrogen] != 0 or valences[0] > 3 or valences[1] > 2:
+                if charges[carbon] != 0 or charges[nitrogen] != 0 or valence[carbon] > 3 or valence[nitrogen] > 2:
                     raise UnsupportedCIF("Polymer link requires native valence handling")
             add_bond(carbon, nitrogen, 1)
     atoms = []
@@ -287,7 +395,7 @@ def _export_model(filename):
     fields |= {key.split(".", 1)[0][1:] for key in data if key.startswith("_condition_")}
     return {"source": str(path), "atoms": atoms, "bonds": [[i, j, order] for (i, j), order in sorted(bonds.items())],
             "segments": segments, "centroids": centroids, "excluded_atoms": int((~keep).sum()),
-            "parse": "ANNOTATED_CIF / asymmetric unit / model 1 / first altloc", "condition_fields": sorted(fields),
+            "parse": "ANNOTATED_CIF / asymmetric unit / model 1 / first altloc", "condition_fields": canonical_condition_fields(fields),
             "present": {key: value in fields for key, value in {"fixed": "condition_coordinate_1_atom",
                         "sequence_fixed": "condition_sequence_1_residue", "unindexed": "condition_index_1_residue",
                         "hbond": "condition_hbond_1_atom", "rasa": "condition_rasa-binned_1_atom"}.items()}}

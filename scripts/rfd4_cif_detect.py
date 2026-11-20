@@ -1,5 +1,6 @@
 """Lightweight routing of CIFs; no scientific environment or PyMOL needed."""
 from pathlib import Path
+import gzip
 import re
 from collections import OrderedDict
 
@@ -68,7 +69,7 @@ def is_rfd4_cif(filename):
     """
     try:
         source = Path(str(filename).strip('"\'')).expanduser()
-        if source.suffix.lower() not in {".cif", ".mmcif"}:
+        if not source.name.lower().endswith((".cif", ".mmcif", ".cif.gz", ".mmcif.gz")):
             return False
         stat = source.stat()
         stamp = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
@@ -76,7 +77,7 @@ def is_rfd4_cif(filename):
         if key in _RESULTS:
             _RESULTS.move_to_end(key)
             return _RESULTS[key]
-        with source.open("rb") as handle:
+        with (gzip.open(source, "rb") if source.suffix.lower() == ".gz" else source.open("rb")) as handle:
             result = False
             if _has_marker(handle):
                 handle.seek(0)
@@ -87,5 +88,5 @@ def is_rfd4_cif(filename):
             while len(_RESULTS) > 2048:
                 _RESULTS.popitem(last=False)
         return result
-    except (OSError, ValueError):
+    except (EOFError, OSError, ValueError):
         return False

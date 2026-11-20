@@ -1,5 +1,6 @@
 """Regression: saved AF3 cofactors must never enter the annotated-input filter."""
 from pathlib import Path
+import gzip
 import sys
 import tempfile
 import unittest
@@ -66,6 +67,13 @@ _entry.id '_atom_site.condition_hbond_1_atom'
     def test_quoted_filename(self):
         self.detect("_atom_site.condition_hbond_1_atom 2\n")
         self.assertTrue(is_rfd4_cif('"' + str(self.source) + '"'))
+
+    def test_compressed_inputs_route_by_content(self):
+        self.source = self.source.with_suffix('.mmcif.gz')
+        for field, annotated in [('_atom_site.annotation_expsegmin_1_residue', False),
+                                 ('_atom_site.condition_index_1_residue', True)]:
+            self.source.write_bytes(gzip.compress(('data_t\n' + field + ' 1\n').encode()))
+            self.assertEqual(is_rfd4_cif(self.source), annotated)
 
     def test_inline_fields_and_quote_boundaries(self):
         self.assertTrue(self.detect("_entry.id 'a value' _condition_coordinate_1_atom.idx0 2\n"))

@@ -1,6 +1,6 @@
 """Headless PyMOL regression: source path via RFD4_SEMANTICS_SOURCE.
 
-pymol -cq -r tests/check_rfd4_semantics.py
+pymolrfd4 -cq -r tests/check_rfd4_semantics.py
 Checks scientific display semantics, native internal groups, session restoration,
 ordinary raw/PML styling and camera-preserving navigation. Never edits the input.
 """
@@ -24,6 +24,16 @@ def run_checks():
     data = cmd._rfd4_viewer_state['objects']['motif']
     absolute = sum(a['fixed'] for a in data['atoms'])
     internal = sum(a['internal'] for a in data['atoms'])
+    assert cmd.count_atoms('motif and polymer and rep cartoon') > 0
+    assert cmd.count_atoms('motif_reference and rep spheres') == 0
+    markers = []
+    cmd.iterate('motif_absolute and rep spheres and not metals',
+                'out.append((s.sphere_color, s.sphere_scale))', space={'out': markers})
+    gold = cmd.get_color_index('rfd4_gold')
+    assert markers and all(color == gold and abs(scale - 0.16) < 1e-6 for color, scale in markers)
+    assert all(c == cmd.get_color_index('oxygen') for _, c, _ in appearance('motif and elem O'))
+    # Also exercise the original ball-and-stick view and its identity tint.
+    cmd.keyword['rfd4_style'][0]('motif', 'legacy')
     assert cmd.count_atoms('motif and rep sticks') == absolute + internal
     assert cmd.count_atoms('motif_reference and rep sticks') == 0
     assert cmd.count_atoms('motif_reference and rep lines') == len(data['atoms']) - absolute - internal
@@ -49,7 +59,7 @@ def run_checks():
     # A pure annotation view remains available when element colors obscure a
     # condition on a heteroatom, especially a metal-only internal group.
     cmd.keyword['rfd4_style'][0]('motif', 'coordinates', labels=0, element_colors=0)
-    assert all(color == cmd.get_color_index('cyan') for _, color, _ in appearance('motif_absolute'))
+    assert all(color == cmd.get_color_index('rfd4_gold') for _, color, _ in appearance('motif_absolute'))
     cmd.keyword['rfd4_style'][0]('motif', 'coordinates', labels=0)
     cmd.keyword['rfd4_style'][0]('motif', 'coordinates', labels=1, context=0)
     hidden_labels = []
@@ -62,8 +72,8 @@ def run_checks():
     cmd.keyword['rfd4_style'][0]('motif', 'coordinates', labels=0, context=1)
     assert cmd.count_atoms('motif_reference and rep lines') == len(data['atoms']) - absolute - internal
     assert cmd.count_atoms('motif_reference and rep sticks') == 0
-    assert all(c == cmd.get_color_index('elemO') for _, c, _ in appearance('motif_reference and elem O'))
-    cmd.keyword['rfd4_style'][0]('motif', 'elements', labels=0)
+    assert all(c == cmd.get_color_index('oxygen') for _, c, _ in appearance('motif_reference and elem O'))
+    cmd.keyword['rfd4_style'][0]('motif', 'elements', labels=0, context='lines')
     assert cmd.count_atoms('motif and rep sticks') == absolute + internal
     assert cmd.count_atoms('motif_reference and rep lines') == len(data['atoms']) - absolute - internal
     cmd.keyword['rfd4_style'][0]('motif', 'elements', labels=1, context=0)
@@ -114,7 +124,7 @@ def run_checks():
         assert cmd.count_atoms('internal_test_internal') == 1
         assert cmd.count_atoms('internal_test_absolute') == absolute
         cmd.keyword['rfd4_style'][0]('internal_test', 'coordinates', labels=0, element_colors=0)
-        assert all(color == cmd.get_color_index('orange') for _, color, _ in appearance('internal_test_internal'))
+        assert all(color == cmd.get_color_index('rfd4_lilac') for _, color, _ in appearance('internal_test_internal'))
         cmd.keyword['rfd4_style'][0]('internal_test', 'coordinates', labels=0)
         assert cmd.count_atoms('internal_test_internal and rep sticks') == 1
         # One alternate-location annotation is outside the lightweight contract.
@@ -160,9 +170,12 @@ def run_checks():
     sizes = []
     cmd.iterate('metal_conditions and (elem Zn or elem Mg)', 'out.append(s.sphere_scale)', space={'out': sizes})
     assert all(abs(x - 0.83) < 1e-6 for x in sizes), sizes
-    assert all(c == cmd.get_color_index('elemZn') for _, c, _ in appearance('metal_conditions_absolute or metal_conditions_internal'))
+    for status, color in [('absolute', 'rfd4_gold'), ('internal', 'rfd4_lilac')]:
+        spheres = []
+        cmd.iterate('metal_conditions_' + status, 'out.append(s.sphere_color)', space={'out': spheres})
+        assert spheres == [cmd.get_color_index(color)]
     style('metal_conditions', 'coordinates', labels=0, element_colors=0)
-    assert all(c == cmd.get_color_index('orange') for _, c, _ in appearance('metal_conditions_internal'))
+    assert all(c == cmd.get_color_index('rfd4_lilac') for _, c, _ in appearance('metal_conditions_internal'))
     style('metal_conditions', 'elements', labels=0)
     assert cmd.count_atoms('metal_conditions and rep spheres') == 2
     style('metal_conditions', 'elements', labels=0, context=1)

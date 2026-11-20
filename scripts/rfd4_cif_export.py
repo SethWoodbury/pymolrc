@@ -9,7 +9,11 @@ from pathlib import Path
 import sys
 import select
 import traceback
-from rfd4_cif_fast import centroid_targets
+# The isolated native process can inherit Python's safe-path mode from its
+# launcher. Import its sibling helper from this checkout even in that mode.
+if __name__ == "__main__" and str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from rfd4_cif_fast import canonical_condition_fields, centroid_targets
 
 
 def export_model(filename):
@@ -77,7 +81,7 @@ def export_model(filename):
                              "min": int(S_SEGMIN.annotation(array)[i]), "max": int(S_SEGMAX.annotation(array)[i])})
     return {"source": str(path), "atoms": atoms, "bonds": bonds, "segments": segments, "centroids": centroids,
             "excluded_atoms": int((~keep).sum()), "parse": "ANNOTATED_CIF / asymmetric unit / model 1 / first altloc",
-            "condition_fields": sorted(name for name in annotations if name.startswith("condition_")),
+            "condition_fields": canonical_condition_fields(name for name in annotations if name.startswith("condition_")),
             "present": {key: condition.full_name in annotations for key, condition in {
                 "fixed": C_CRD, "sequence_fixed": C_SEQ, "unindexed": C_IDX, "hbond": C_HB, "rasa": C_RAS}.items()}}
 

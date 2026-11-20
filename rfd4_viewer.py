@@ -1,4 +1,4 @@
-"""Automatic, read-only PyMOL loading and styling of RFD4 annotated CIFs.
+"""Opt-in, read-only PyMOL loading and styling of RFD4 annotated CIFs.
 
 Only the subprocess uses RFD4/AtomWorks; normal PyMOL stays in its own Python.
 Load with ``run ~/pymolrc/rfd4_viewer.py``; enter ``help_rfd4`` for usage.
@@ -13,9 +13,6 @@ import inspect
 import os
 from pathlib import Path
 import re
-import subprocess
-import select
-import tempfile
 import threading
 import time
 
@@ -31,15 +28,16 @@ if not hasattr(cmd, "_rfd4_viewer_state"):
 _RFD4_STATE = cmd._rfd4_viewer_state
 _RFD4_OBJECTS = _RFD4_STATE["objects"]
 _RFD4_DIR = Path(inspect.currentframe().f_code.co_filename).resolve().parent
-_cache_spec = importlib.util.spec_from_file_location("_rfd4_model_cache", _RFD4_DIR / "scripts/rfd4_model_cache.py")
-_RFD4_CACHE = importlib.util.module_from_spec(_cache_spec)
-_cache_spec.loader.exec_module(_RFD4_CACHE)
-_detect_spec = importlib.util.spec_from_file_location("_rfd4_cif_detect", _RFD4_DIR / "scripts/rfd4_cif_detect.py")
-_RFD4_DETECT = importlib.util.module_from_spec(_detect_spec)
-_detect_spec.loader.exec_module(_RFD4_DETECT)
-_fast_spec = importlib.util.spec_from_file_location("_rfd4_cif_fast", _RFD4_DIR / "scripts/rfd4_cif_fast.py")
-_RFD4_FAST = importlib.util.module_from_spec(_fast_spec)
-_fast_spec.loader.exec_module(_RFD4_FAST)
+def _viewer_module(name):
+    spec = importlib.util.spec_from_file_location(name, _RFD4_DIR / "scripts" / (name + ".py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_RFD4_CACHE = _viewer_module("rfd4_model_cache")
+_RFD4_DETECT = _viewer_module("rfd4_cif_detect")
+_RFD4_FAST = _viewer_module("rfd4_cif_fast")
 _RFD4_STATE.setdefault("cache_stats", {"memory_hits": 0, "disk_hits": 0, "native_parses": 0,
                                       "last_seconds": 0.0, "last_route": "none"})
 _RFD4_STATE["cache_stats"].setdefault("lightweight_reads", 0)
@@ -50,26 +48,21 @@ def _selection(obj, suffix):
 
 
 def _select_atoms(obj, suffix, predicate, data, _self):
-    identifiers = [str(atom["pymol_index"]) for atom in data["atoms"] if predicate(atom)]
-    expression = "model " + obj + " and index " + "+".join(identifiers) if identifiers else "none"
-    _self.select(_selection(obj, suffix), expression, quiet=1)
-    _self.disable(_selection(obj, suffix))
+    indices = [atom["pymol_index"] for atom in data["atoms"] if predicate(atom)]
+    name = _selection(obj, suffix)
+    _self.select_list(name, obj, indices, mode="index")
+    _self.disable(name)
 
 
 def _stop_native_worker():
-    worker = _RFD4_STATE.get("worker")
-    if worker is not None:
-        if worker.poll() is None:
-            worker.terminate()
-            try:
-                worker.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                worker.kill()
-                worker.wait(timeout=3)
-        worker.stdin.close()
-        worker.stdout.close()
-        worker._rfd4_stderr.close()
-    _RFD4_STATE["worker"] = None
+    reader = _RFD4_STATE.get("reader")
+    if reader is None and _RFD4_STATE.get("worker") is not None:
+        # A viewer reloaded in a live session can inherit an older worker.
+        reader = _RFD4_CACHE.NativeReader({})
+        reader.worker = _RFD4_STATE["worker"]
+    if reader is not None:
+        reader.close()
+    _RFD4_STATE.update(reader=None, worker=None)
 
 
 def _native_model(source, repo="", python=""):
@@ -94,13 +87,17 @@ def _native_model(source, repo="", python=""):
             return data
     config = _RFD4_CACHE.reader_config(repo, python)
     reader = _RFD4_CACHE.provenance(config)
-    repo_path, interpreter, exporter = config["repo"], config["python"], config["exporter"]
     worker_key = reader["sha256"]
     source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
     key = (source_hash, worker_key)
     stats = _RFD4_STATE["cache_stats"]
 
     def record(data, route):
+        cache = _RFD4_STATE["cache"]
+        cache[key] = data
+        cache.move_to_end(key)
+        if len(cache) > 32:
+            cache.popitem(last=False)
         stats[route] += 1
         stats.update(last_seconds=round(time.monotonic() - started, 4), last_route=route)
         data = deepcopy(data)
@@ -109,46 +106,19 @@ def _native_model(source, repo="", python=""):
 
     with _RFD4_STATE["lock"]:
         if key in _RFD4_STATE["cache"]:
-            _RFD4_STATE["cache"].move_to_end(key)
             return record(_RFD4_STATE["cache"][key], "memory_hits")
         data = _RFD4_CACHE.read_cached(source, source_hash, worker_key)
         if data is not None:
-            _RFD4_STATE["cache"][key] = data
-            while len(_RFD4_STATE["cache"]) > 32:
-                _RFD4_STATE["cache"].popitem(last=False)
             return record(data, "disk_hits")
-        worker = _RFD4_STATE.get("worker")
-        if worker is None or worker.poll() is not None or _RFD4_STATE["worker_key"] != worker_key:
+        if _RFD4_STATE.get("reader") is None or _RFD4_STATE["worker_key"] != worker_key:
             _stop_native_worker()
-            environment = dict(os.environ)
-            for name in ("PYTHONHOME", "PYTHONEXECUTABLE", "__PYVENV_LAUNCHER__"):
-                environment.pop(name, None)
-            environment.update(CLUSTER=config["cluster"], CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="1",
-                               OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
-            error_log = tempfile.TemporaryFile(mode="w+t")
-            worker = subprocess.Popen([str(interpreter), str(exporter), "--serve"], cwd=str(repo_path),
-                                      env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                      stderr=error_log, text=True, bufsize=1)
-            worker._rfd4_stderr = error_log
-            _RFD4_STATE.update(worker=worker, worker_key=worker_key)
-            print("[RFD4] Preparing a new display cache on CPU (reused across PyMOL sessions).")
+            _RFD4_STATE.update(reader=_RFD4_CACHE.NativeReader(config), worker_key=worker_key)
+        native = _RFD4_STATE["reader"]
+        print("[RFD4] Reading uncached annotations with the native CPU parser.")
         try:
-            worker.stdin.write(json.dumps({"source": str(source)}) + "\n")
-            worker.stdin.flush()
-            if not select.select([worker.stdout], [], [], 180)[0]:
-                raise RuntimeError("Native RFD4 reader timed out after 180 seconds.")
-            line = worker.stdout.readline()
-            if not line:
-                worker._rfd4_stderr.seek(0)
-                raise RuntimeError("Native reader exited:\n" + worker._rfd4_stderr.read()[-6000:])
-            response = json.loads(line)
-        except Exception:
-            _stop_native_worker()
-            raise
-        if not response["ok"]:
-            raise RuntimeError("Native RFD4 parsing failed:\n" + response["error"][-6000:])
-        data = response["model"]
-        _RFD4_CACHE.validate_model(data)
+            data = native.model(source)
+        finally:
+            _RFD4_STATE["worker"] = native.worker
         if hashlib.sha256(source.read_bytes()).hexdigest() != source_hash:
             raise RuntimeError("Source CIF changed during native parsing; reload its current contents.")
         if _RFD4_CACHE.provenance(config)["sha256"] != worker_key:
@@ -158,9 +128,6 @@ def _native_model(source, repo="", python=""):
             _RFD4_CACHE.write_cached(source_hash, reader, data)
         except OSError as error:
             print("[RFD4] Could not save the disposable display cache: " + str(error))
-        _RFD4_STATE["cache"][key] = data
-        while len(_RFD4_STATE["cache"]) > 32:
-            _RFD4_STATE["cache"].popitem(last=False)
         return record(data, "native_parses")
 
 
@@ -174,16 +141,18 @@ def _is_rfd4_cif(filename):
     return _RFD4_DETECT.is_rfd4_cif(filename)
 
 
-def rfd4_load(filename, object="", mode="coordinates", labels=1, repo="", python="", _self=cmd,
+def rfd4_load(filename, object="", mode="coordinates", labels=0, repo="", python="", _self=cmd,
               _automatic=False, _zoom=-1):
-    """Load an annotated CIF; normal ``load`` and command-line opens also work.
+    """Inspect one annotated CIF in either launch mode.
 
-    rfd4_load /path/input.cif [, object=motif] [, mode=coordinates] [, labels=1]
+    rfd4_load /path/input.cif [, object=motif] [, mode=coordinates] [, labels=0]
     """
     source = Path(str(filename).strip('"\'')).expanduser().resolve(strict=True)
-    if mode not in {"coordinates", "sequence", "unindexed", "hbond", "burial", "elements"}:
-        raise ValueError("Mode must be coordinates, sequence, unindexed, hbond, burial, or elements.")
-    stem = re.sub(r"[^A-Za-z0-9_]", "_", source.stem)
+    labels, _zoom = int(labels), int(_zoom)
+    if mode not in _RFD4_MODES:
+        raise ValueError("Mode must be " + ", ".join(_RFD4_MODES))
+    base = source.with_suffix("") if source.suffix.lower() == ".gz" else source
+    stem = re.sub(r"[^A-Za-z0-9_]", "_", base.stem)
     proposed = str(object) or (stem if _automatic else "rfd4_" + stem)
     if not re.fullmatch(r"[A-Za-z0-9_]+", proposed):
         raise ValueError("Choose an object name using letters, numbers and underscores.")
@@ -212,34 +181,41 @@ def rfd4_load(filename, object="", mode="coordinates", labels=1, repo="", python
     # saved sessions and visibility stay together. They are never native atoms.
     physical_keys = {(a["chain"], a["resi"], a["resn"], a["name"]) for a in data["atoms"]}
     centroid_keys = []
+    reserved = set(physical_keys)
     for centroid in data["centroids"]:
         marker = Atom()
         marker.name, marker.symbol, marker.resn, marker.chain = "ORI", "X", "ORI", ""
         marker.resi = str(len(centroid_keys) + 1)
-        while (marker.chain, marker.resi, marker.resn, marker.name) in physical_keys | set(centroid_keys):
+        while (marker.chain, marker.resi, marker.resn, marker.name) in reserved:
             marker.resi = str(int(marker.resi) + 1)
         marker.segi, marker.hetatm, marker.q, marker.vdw = "RFD4_CENTROID", 1, 1.0, 1.5
         marker.coord = list(centroid["xyz"])
         marker.id = len(model.atom) + 1
         model.atom.append(marker)
-        centroid_keys.append((marker.chain, marker.resi, marker.resn, marker.name))
+        key = (marker.chain, marker.resi, marker.resn, marker.name)
+        centroid_keys.append(key)
+        reserved.add(key)
     _self.load_model(model, obj, zoom=0, discrete=0)
     # PyMOL may sort atoms and replace serial IDs during load. Match identities
     # before building masks so native annotation indices can never shift atoms.
-    observed = _self.get_model(obj).atom
-    identities = {(atom.chain, atom.resi, atom.resn, atom.name): atom for atom in observed}
-    expected_keys = [(atom["chain"], atom["resi"], atom["resn"], atom["name"]) for atom in data["atoms"]]
-    if len(identities) != len(observed) or len(set(expected_keys)) != len(expected_keys) or set(identities) != set(expected_keys + centroid_keys):
+    identities = {}
+    observed = _self.iterate(obj, "indices[(chain, resi, resn, name)] = index", space={"indices": identities})
+    if len(physical_keys) != len(data["atoms"]) or len(identities) != observed or identities.keys() != reserved:
         _self.delete(obj)
         raise RuntimeError("PyMOL did not preserve unique native atom identities; no annotation masks were applied.")
-    for atom, key in zip(data["atoms"], expected_keys):
-        atom["pymol_index"] = identities[key].index
-    data["centroid_indices"] = [identities[key].index for key in centroid_keys]
+    for atom in data["atoms"]:
+        atom["pymol_index"] = identities[atom["chain"], atom["resi"], atom["resn"], atom["name"]]
+    data["centroid_indices"] = [identities[key] for key in centroid_keys]
     _RFD4_OBJECTS[obj] = data
-    if not _automatic:
-        _ensure_selections(obj, _self)
-    rfd4_style(obj, mode, labels=labels, _self=_self)
-    if int(_zoom) == 1 or (int(_zoom) < 0 and first_object):
+    try:
+        if not _automatic:
+            _ensure_selections(obj, _self)
+        rfd4_style(obj, mode, labels=labels, _self=_self)
+    except Exception:
+        _self.delete(obj)
+        _RFD4_OBJECTS.pop(obj, None)
+        raise
+    if _zoom == 1 or (_zoom < 0 and first_object):
         _self.zoom(obj)
     if not _automatic:
         rfd4_info(obj, _self=_self)
@@ -273,22 +249,26 @@ def _ensure_selections(obj, _self=cmd, coordinates_only=False):
                       if key in {"fixed", "absolute", "internal", "reference"}}
     for suffix, predicate in selections.items():
         _select_atoms(obj, suffix, predicate, data, _self)
-    _self.group(obj + "_annotations", " ".join(_selection(obj, suffix) for suffix in selections), action="add")
+    names = [_selection(obj, suffix) for suffix in selections]
+    group = obj + "_annotations"
+    new_group = group not in _self.get_names("group_objects")
+    _self.group(group, " ".join(names), action="add")
+    if new_group:
+        # A visible selection-only group consumes a blank cell in grid mode.
+        _self.disable(group)
+        _self.group(group, action="close")
+    data.setdefault("selection_names", set()).update(names)
     data["coordinate_selections_created"] = True
     if not coordinates_only:
         data["selections_created"] = True
 
 
-def _element_palette(_self):
-    """Use the user's named palette when installed, with standalone fallbacks."""
-    choices = {
-        "protein": ("sc05", "green"), "backbone": ("bb05", "forest"),
-        "ligand": ("lig_amethyst3", "violet"), "metal": ("elemZn", "gray60"),
-        "N": ("elemN", "blue"), "O": ("elemO", "red"),
-        "S": ("elemS", "yellow"), "P": ("elemP", "orange"), "H": ("elemH", "white"),
-    }
-    return {key: named if _self.get_color_index(named) >= 0 else fallback
-            for key, (named, fallback) in choices.items()}
+def _element_palette(_self, legacy=False):
+    """Look up installed theme colors, or use PyMOL colors when run standalone."""
+    theme = "foliage" if legacy else getattr(_self, "_pymolrc_theme", "")
+    palettes = globals().get("_PYMOLRC_THEMES", {})
+    side, backbone, ligand = palettes.get(theme, ("green", "forest", "violet"))
+    return {"protein": side, "backbone": backbone, "ligand": ligand, "soft": theme == "foliage"}
 
 
 def _shade_free_identity(obj, _self):
@@ -336,15 +316,17 @@ def _style_centroids(obj, _self):
         print("[RFD4] No centroids.")
         return
     selection = _selection(obj, "centroids")
-    _self.select(selection, "model %s and index %s" % (obj, "+".join(map(str, indices))), quiet=1)
+    _self.select_list(selection, obj, indices, mode="index")
     _self.disable(selection)
     _self.group(obj + "_annotations", selection, action="add")
+    data.setdefault("selection_names", set()).add(selection)
     _self.hide("everything", selection)
     _self.label(selection, "")
     if not data.get("show_centroids", True):
         print("[RFD4] Centroid markers hidden.")
         return
     _self.color("hotpink", selection)
+    _self.set("sphere_color", "hotpink", selection)
     _self.set("sphere_scale", 1.0, selection)
     _self.set("sphere_transparency", 0.55, selection)
     _self.set("label_color", "hotpink", selection)
@@ -363,89 +345,161 @@ def rfd4_centroids(object="", show=1, _self=cmd):
     _style_centroids(obj, _self)
 
 
-def rfd4_style(object="", mode="coordinates", labels=1, context=1, element_colors=1, _self=cmd):
-    """Switch annotation colors: coordinates | sequence | unindexed | hbond | burial | elements."""
+_RFD4_MODES = {
+    "coordinates": (), "elements": (), "legacy": (),
+    "sequence": (("sequence_fixed", "teal"), ("sequence_free", "gray70")),
+    "unindexed": (("unindexed", "violet"),),
+    "hbond": (("hb_donor", "marine"), ("hb_acceptor", "salmon"), ("hb_both", "magenta")),
+    "burial": (("buried", "forest"), ("partial", "orange"), ("exposed", "skyblue")),
+}
+_RFD4_METALS = "Zn+Fe+Mg+Mn+Cu+Co+Ni+Ca+Na+K+Mo+V+W+Cd+Hg+Pt+Pd+Au+Ag+Al+Ba+Sr+Li+Cs+Rb+Cr"
+for _name, _rgb in {"rfd4_gold": (246, 187, 69), "rfd4_ochre": (184, 146, 74),
+                    "rfd4_lilac": (187, 145, 245),
+                    "rfd4_slate": (105, 177, 216)}.items():
+    cmd.set_color(_name, list(_rgb), quiet=1)
+
+
+def _rfd4_recolor(obj, _self=cmd):
+    """Apply a molecular theme to physical atoms without changing any representations."""
+    data = _RFD4_OBJECTS[obj]
+    options = data.get("style", {})
+    mode = options.get("mode", "coordinates")
+    if mode not in {"coordinates", "elements", "legacy"} or (mode != "elements" and not int(options.get("element_colors", 1))):
+        return
+    legacy = mode == "legacy"
+    internal_color = "orange" if legacy else options.get("internal_color", "rfd4_lilac")
+    internal = _selection(obj, "internal")
+    scoped = "model " + obj
+    if data.get("centroid_indices"):
+        markers = "+".join(map(str, data["centroid_indices"]))
+        scoped += " and not index " + markers
+    colors = _element_palette(_self, legacy)
+    _self.color("atomic", scoped)
+    protein_color = "cyan" if legacy else colors["protein"]
+    _self.color(protein_color, scoped + " and polymer.protein and elem C")
+    if mode == "elements":
+        _self.color(colors["backbone"], scoped + " and polymer.protein and elem C and backbone")
+    _self.color(colors["ligand"], scoped + " and not polymer.protein and elem C")
+    if colors["soft"]:
+        for symbol in ("N", "O", "S", "P", "H"):
+            color = "elem" + symbol
+            if _self.get_color_index(color) >= 0:
+                _self.color(color, scoped + " and elem " + symbol)
+        if _self.get_color_index("elemZn") >= 0:
+            _self.color("elemZn", scoped + " and elem " + _RFD4_METALS)
+    if mode in {"coordinates", "legacy"}:
+        _self.color(internal_color, internal + " and elem C")
+    _shade_free_identity(obj, _self)
+
+
+def rfd4_style(object="", mode="coordinates", labels=0, context="cartoon", element_colors=1, _self=cmd,
+               fixed_scale=0.16, fixed_color="rfd4_gold", internal_color="rfd4_lilac",
+               markers="auto", overview_min=40, fixed_cartoon="rfd4_ochre"):
+    """Show conditioning on cartoons. context=cartoon|lines|0, or mode=legacy for the original view."""
     obj = _annotated_object(object, _self)
-    _ensure_selections(obj, _self, coordinates_only=mode in {"coordinates", "elements"})
-    palettes = {
-        "coordinates": [("absolute", "cyan"), ("internal", "orange")],
-        "sequence": [("sequence_fixed", "teal"), ("sequence_free", "gray70")],
-        "unindexed": [("unindexed", "violet")],
-        "hbond": [("hb_donor", "marine"), ("hb_acceptor", "salmon"), ("hb_both", "magenta")],
-        "burial": [("buried", "forest"), ("partial", "orange"), ("exposed", "skyblue")],
-        "elements": [],
-    }
-    if mode not in palettes:
-        raise ValueError("Mode must be " + ", ".join(palettes))
-    coordinate_view = mode in {"coordinates", "elements"}
-    chemical_colors = mode == "elements" or (mode == "coordinates" and int(element_colors))
-    show_context = coordinate_view and int(context)
+    if mode not in _RFD4_MODES:
+        raise ValueError("Mode must be " + ", ".join(_RFD4_MODES))
+    scale = float(fixed_scale)
+    if not 0 < scale < float("inf"):
+        raise ValueError("fixed_scale must be a finite positive sphere scale.")
+    for color in (fixed_color, internal_color, fixed_cartoon):
+        if _self.get_color_index(color) < 0:
+            raise ValueError("Unknown PyMOL color " + str(color))
+    context_name = {"0": "off", "1": "lines"}.get(str(context), str(context).lower())
+    if context_name not in {"cartoon", "lines", "off"}:
+        raise ValueError("context must be cartoon, lines (or 1), or off (or 0).")
+    overview_min = int(overview_min)
+    if markers not in {"auto", "all"} or overview_min < 1:
+        raise ValueError("markers must be auto or all, and overview_min must be a positive C-alpha count.")
+    legacy = mode == "legacy"
+    coordinate_view = mode in {"coordinates", "elements", "legacy"}
+    chemical_colors = mode == "elements" or (coordinate_view and int(element_colors))
+    _ensure_selections(obj, _self, coordinates_only=coordinate_view)
+    data = _RFD4_OBJECTS[obj]
+    data["style"] = dict(mode=mode, labels=labels, context=context, element_colors=element_colors,
+                         fixed_scale=fixed_scale, fixed_color=fixed_color, internal_color=internal_color,
+                         markers=markers, overview_min=overview_min, fixed_cartoon=fixed_cartoon)
+    if legacy:
+        context_name = "lines" if context_name == "cartoon" else context_name
+        fixed_color, internal_color, scale = "cyan", "orange", 0.25
+
+    absolute, internal, reference = (_selection(obj, name) for name in ("absolute", "internal", "reference"))
+    targets = "(%s or %s)" % (absolute, internal)
+    scoped = "model " + obj
+    with_ca = "(byres (%s and polymer.protein and name CA))" % scoped
+    incoming = "(byres (%s and name N and neighbor (%s and name C)))" % (with_ca, with_ca)
+    outgoing = "(byres (%s and name C and neighbor (%s and name N)))" % (with_ca, with_ca)
+    shown = targets if coordinate_view else scoped
+    overview = (mode == "coordinates" and context_name == "cartoon" and markers == "auto"
+                and _self.count_atoms(absolute + " and polymer.protein and name CA") >= overview_min)
+    if overview:
+        # A continuous, wholly fixed peptide already has a gold trace. Retain
+        # beads on partial residues, termini, disconnected motifs and ligands.
+        interior = incoming + " and " + outgoing
+        mixed = "(byres (%s or %s))" % (reference, internal)
+        shown = "(%s and not ((%s) and not %s))" % (targets, interior, mixed)
+    visible = scoped if not coordinate_view or context_name != "off" else targets
+
+    # This viewer handles metal visibility explicitly in each context.
+    show = getattr(_self, "_pymolrc_metal_show_state", {}).get("show", _self.show)
     _self.hide("everything", obj)
-    shown = (_selection(obj, "absolute") + " or " + _selection(obj, "internal")) if coordinate_view else obj
-    _self.show("sticks", shown)
-    _self.show("nonbonded", shown)
-    if show_context:
-        _self.show("lines", _selection(obj, "reference"))
-        _self.show("nonbonded", _selection(obj, "reference"))
-    _self.set("stick_radius", 0.13, obj)
-    # Clear older viewer overrides so metal spheres inherit live global changes.
-    metal_elements = "Zn+Fe+Mg+Mn+Cu+Co+Ni+Ca+Na+K+Mo+V+W+Cd+Hg+Pt+Pd+Au+Ag+Al+Ba+Sr+Li+Cs+Rb+Cr"
+    _self.unset("cartoon_color", scoped)
+    _self.unset("sphere_color", scoped)
     _self.unset("sphere_scale", obj)
-    _self.unset("sphere_scale", "model " + obj)
-    _self.set("sphere_scale", 0.25, "model %s and not (elem %s)" % (obj, metal_elements))
-    _self.color("gray60", obj)
+    _self.unset("sphere_scale", scoped)
+    _self.set("sphere_scale", scale, "%s and not elem %s" % (scoped, _RFD4_METALS))
+    _self.set("stick_radius", 0.13, obj)
+    show("sticks", shown)
+    show("nonbonded", shown)
+    if context_name == "cartoon":
+        show("cartoon", scoped + " and polymer")
+    if coordinate_view and context_name != "off":
+        lines = reference
+        if context_name == "cartoon":
+            # Keep ligands and fragments without a cartoon trace visible.
+            lines += " and not (%s or %s)" % (incoming, outgoing)
+        show("lines", lines)
+        show("nonbonded", lines)
+        _self.hide("spheres", reference)
+
+    if not chemical_colors:
+        _self.color("gray60", obj)
     if chemical_colors:
-        colors = _element_palette(_self)
-        _self.color("atomic", obj)
-        _self.color("cyan" if mode == "coordinates" else colors["protein"],
-                    "model %s and polymer.protein and elem C" % obj)
-        if mode == "elements":
-            _self.color(colors["backbone"], "model %s and polymer.protein and elem C and backbone" % obj)
-        _self.color(colors["ligand"], "model %s and not polymer.protein and elem C" % obj)
-        for element in ("N", "O", "S", "P", "H"):
-            _self.color(colors[element], "model %s and elem %s" % (obj, element))
-        if mode == "coordinates":
-            # Internal geometry takes precedence for carbon atoms in any component.
-            _self.color("orange", _selection(obj, "internal") + " and elem C")
-        _shade_free_identity(obj, _self)
+        _rfd4_recolor(obj, _self)
+    elif coordinate_view:
+        _self.color(fixed_color, absolute)
+        _self.color(internal_color, internal)
     else:
-        for suffix, color in palettes[mode]:
+        for suffix, color in _RFD4_MODES[mode]:
             _self.color(color, _selection(obj, suffix))
-    if mode == "coordinates":
-        _self.show("spheres", shown)
+
+    if mode in {"coordinates", "legacy"}:
+        show("spheres", shown)
+        if not legacy:
+            # Representation colors encode the coordinate mask even on O/N/P.
+            # Atom/stick colors still identify the element.
+            for selection, color in ((absolute, fixed_color), (internal, internal_color)):
+                _self.set("sphere_color", color, selection)
+            _self.set("cartoon_color", fixed_cartoon, absolute)
+            _self.set("cartoon_color", internal_color, internal)
+            _self.set("cartoon_color", "rfd4_slate", reference)
     elif mode == "hbond":
-        _self.show("spheres", _selection(obj, "hb_donor") + " or " + _selection(obj, "hb_acceptor"))
-    # Atom elements avoid the protein CA / calcium and CD / cadmium collisions.
-    # Metal atoms keep the global sphere size; only nonmetals get small spheres.
-    visible = "(" + shown + ")"
-    if show_context:
-        visible += " or " + _selection(obj, "reference")
-    metals = "(%s) and elem %s" % (shown, metal_elements)
-    if _self.count_atoms(metals):
-        _self.show("spheres", metals)
-        if chemical_colors:
-            _self.color(colors["metal"], metals)
-    if show_context:
-        # The startup show hook adds metal spheres to lines/nonbonded. Undo that
-        # for references: unconstrained atoms stay lines or unbonded crosses.
-        _self.hide("spheres", _selection(obj, "reference"))
+        show("spheres", _selection(obj, "hb_donor") + " or " + _selection(obj, "hb_acceptor"))
+    show("spheres", "(%s) and elem %s" % (shown, _RFD4_METALS))
     _self.label(obj, "")
     if int(labels):
         _self.label("(%s) and name CA" % visible, '"%s/%s%s" % (chain,resn,resi)')
     _style_centroids(obj, _self)
-    if chemical_colors:
-        legend = "element colors; ligand/cofactor C=%s; metals=%s; free-identity protein C=lighter shade" % (colors["ligand"], colors["metal"])
-        legend += "; protein absolute C=cyan; internal C=orange" if mode == "coordinates" else "; protein C=" + colors["protein"]
+    if mode in {"coordinates", "legacy"}:
+        atoms = data["atoms"]
+        n_abs = sum(a["fixed"] for a in atoms)
+        n_int = sum(a["internal"] for a in atoms)
+        print("[RFD4] %d absolute (%s), %d internal (%s), %d reference (%s context)." %
+              (n_abs, fixed_color, n_int, internal_color, len(atoms) - n_abs - n_int, context_name))
+        if overview:
+            print("[RFD4] Fully fixed stretches are cartoon-only. Use rfd4_style , coordinates, markers=all for every bead.")
     else:
-        legend = ", ".join(suffix + "=" + color for suffix, color in palettes[mode])
-    print("[RFD4] " + mode + ": " + legend)
-    if mode == "coordinates":
-        atoms = _RFD4_OBJECTS[obj]["atoms"]
-        absolute, internal = sum(a["fixed"] for a in atoms), sum(a["internal"] for a in atoms)
-        print("[RFD4] %d absolute targets; %d internal-group atoms (group placement free); "
-              "%d reference-only atoms %s. Sequence-fixed does not mean coordinate-fixed." %
-              (absolute, internal, len(atoms) - absolute - internal, "in lines (unbonded atoms as crosses)" if show_context else "hidden"))
-
+        print("[RFD4] " + mode + "  " + ", ".join(key + "=" + color for key, color in _RFD4_MODES[mode]))
 
 def rfd4_info(object, _self=cmd):
     """Print condition counts, retained source path, and expandable scaffold instructions."""
@@ -462,7 +516,7 @@ def rfd4_info(object, _self=cmd):
         print("  %-15s %d atoms%s" % ("absolute" if field == "fixed" else field, sum(atom[field] for atom in atoms),
               "" if data["present"][field] else " (annotation absent; native default)"))
     print("  internal        %d atoms (relative geometry; group placement is not fixed)." % sum(a["internal"] for a in atoms))
-    print("  reference-only  %d retained atoms; lines in the default coordinate view (context=0 hides them)." %
+    print("  reference-only  %d retained atoms; slate cartoon in coordinate view (context=0 hides them)." %
           sum(not a["fixed"] and not a["internal"] for a in atoms))
     if "centroids" not in data:
         print("  centroid metadata unavailable; reload the source CIF.")
@@ -484,41 +538,32 @@ def rfd4_info(object, _self=cmd):
 
 def help_rfd4():
     print("""
-RFD4 annotated-CIF inspection (read-only; no generation)
-  pymol /path/input.cif             from a terminal: show coordinate-conditioned atoms
-  load /path/input.cif              inside PyMOL: automatic native parsing
-  rfd4_style , hbond                color the single visible annotated object
-  rfd4_load /absolute/path/input.cif, motif
-  rfd4_style motif, coordinates    element colors; cyan protein / purple ligand C; orange internal C
-  rfd4_style motif, coordinates, element_colors=0   flat cyan absolute / orange internal atoms
-  rfd4_style motif, coordinates, context=0   hide reference-only context lines
-  rfd4_style motif, sequence       teal fixed identities; gray redesignable identities
-  rfd4_style motif, unindexed      violet freely placed sequence groups
-  rfd4_style motif, hbond          blue donor / salmon acceptor / magenta both
-  rfd4_style motif, burial         green buried / orange partial / blue exposed
-  rfd4_style motif, elements       ordinary protein/ligand colors; free-identity carbons lighter
-  rfd4_centroids motif, 0          hide magenta centroid markers (1 = show)
-  rfd4_info motif                  source, condition counts, scaffold-length ranges
-  rfd4_cache_info                   cache hits and last model-read timing
+RFD4 annotation inspection
+  pymol prediction.cif                       ordinary PyMOL load
+  pymolrfd4 prediction.cif annotated.cif     inspect annotated files in a mixed session
+  rfd4_load input.cif, motif                 inspect one file explicitly
+  rfd4_autoload on | off | status             routing for subsequent loads
 
-Each object has named selections under <object>_annotations. Coordinates and
-native bonds are preserved. Only asymmetric-unit/model-1/first-altloc physical
-atoms are shown; placeholders and zero-occupancy atoms are omitted. Labels show
-source residue IDs, not final designed positions. Additional condition types are
-retained in the source CIF; this viewer colors the five listed categories.
-Coordinate targets are sticks/small spheres; unconstrained reference atoms are
-lines (unbonded atoms are crosses). Free-identity protein carbons use a lighter
-shade of their primary color. Heteroatom colors do not encode sequence identity.
-Centroid targets appear as labeled translucent magenta ORI spheres/crosses,
-one per conditioned chain. They are display-only markers in the source frame,
-not physical atoms or added inference tokens. No targets prints "No centroids".
-Use the original annotated CIF for inference; PyMOL exports include display markers.
+  rfd4_style motif, coordinates              ochre absolute / lilac internal / blue reference cartoon
+  rfd4_style motif, coordinates, markers=all show every target as a bead
+  rfd4_style motif, coordinates, fixed_scale=0.12, fixed_color=yellow
+  rfd4_style motif, coordinates, context=0   hide reference atoms (lines = atomic context)
+  rfd4_style motif, sequence                 teal fixed / gray free identity
+  rfd4_style motif, unindexed                violet unindexed atoms
+  rfd4_style motif, hbond                    donor / acceptor / both
+  rfd4_style motif, burial                   buried / intermediate / exposed
+  rfd4_style motif, elements                 molecular palette and element-colored sticks
+  rfd4_style motif, legacy                   original cyan/orange atom view with reference lines
+  rfd4_centroids motif, 0                    hide centroid targets (1 shows them)
+  rfd4_info motif                            source, counts and segment ranges
+  rfd4_cache_info                            reader route and timing
 
-Supported self-contained CIFs use a lightweight CIF reader directly in PyMOL.
-Other schemas use verified JSON display caches; a native cache miss runs
-~/git/RFD4-Proteina-dev/.venv/bin/python on CPU once.
-Overrides: RFD4_REPO/RFD4_PYTHON/RFD4_CLUSTER environment variables, or repo=/python=
-on rfd4_load. No remote PyMOL server or model/checkpoint loading is required.
+Omit the name when one annotated object is visible, e.g. rfd4_style , sequence.
+Cartoons follow the alpha-carbon mask. Small spheres mark individual conditioned
+atoms. With 40 or more absolute alpha carbons, continuous fully fixed stretches
+use cartoons alone. Adjust overview_min, fixed_scale, fixed_cartoon, fixed_color
+or internal_color in rfd4_style. labels=1 shows residue IDs. The original CIF
+holds the annotations; ORI centroids are display markers. See RFD4_QUICKSTART.md.
 """)
 
 
@@ -533,7 +578,8 @@ cmd.extend("rfd4_cache_info", rfd4_cache_info)
 def _automatic_load(*args, **kwargs):
     original = _RFD4_STATE["original_load"]
     filename = args[0] if args else kwargs.get("filename", "")
-    if not _is_rfd4_cif(filename):
+    fmt = args[3] if len(args) > 3 else kwargs.get("format", "")
+    if not _RFD4_STATE["autoload"] or str(fmt).lower() not in {"", "cif", "mmcif"} or not _is_rfd4_cif(filename):
         return original(*args, **kwargs)
     bound = inspect.signature(original).bind_partial(*args, **kwargs).arguments
     if int(bound.get("state", 0)) not in (0, 1):
@@ -561,6 +607,21 @@ def _install_autoload():
     cmd.keyword["load"][0] = cmd.load
 
 
+def rfd4_autoload(mode="status"):
+    """Toggle automatic annotation inspection for subsequent loads in this session."""
+    value = str(mode).strip().lower()
+    if value in {"on", "off"}:
+        _RFD4_STATE["autoload"] = value == "on"
+    elif value != "status":
+        raise ValueError("Use rfd4_autoload on, off, or status.")
+    print("[RFD4] Automatic inspection " + ("on" if _RFD4_STATE["autoload"] else "off"))
+
+
+# Explicitly running the standalone kit still enables it on vanilla PyMOL.
+# The full startup config reserves interception for the detail launcher.
+_RFD4_STATE.setdefault("autoload", os.environ.get("PYMOL_RFD4", "") == "1" or
+                       not hasattr(cmd, "_pymolrc_originals"))
+cmd.extend("rfd4_autoload", rfd4_autoload)
 _automatic_load._rfd4_dispatch = True
 _install_autoload()
 if not _RFD4_STATE.get("atexit_registered"):

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Enable annotation dispatch for this PyMOL process, including subsequent loads.
+export PYMOL_RFD4=1
+exec pymol "$@"

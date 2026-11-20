@@ -1,251 +1,50 @@
-# pymolrc
+# PyMOL startup for protein structures
 
-My PyMOL startup config (`.pymolrc`): a foliage-green color scheme plus performance
-fixes and custom commands for browsing protein-design outputs.
+Open a structure with `pymol`. Use `pymolrfd4` to inspect coordinate and sequence annotations in RFdiffusion4-Proteina CIFs. Both commands accept the usual PyMOL flags and multiple files.
 
-![preview](preview_original_plus_fixes.png)
+![Coordinate constraints on a protein cartoon alongside the Fjord, Clay, Iris, and Foliage color schemes](docs/viewer-guide.png)
+
+The left panel uses illustrative masks on backbone coordinates from the bundled example. The four palette previews use the same structure and camera.
 
 ## Install
 
-```bash
-cp .pymolrc ~/.pymolrc        # back up any existing ~/.pymolrc first
-# or symlink:  ln -s "$PWD/.pymolrc" ~/.pymolrc
+Keep the checkout together. From its root, link the startup file and launcher.
+
+```sh
+mkdir -p ~/.local/bin
+ln -s "$PWD/.pymolrc" ~/.pymolrc
+ln -s "$PWD/bin/pymolrfd4" ~/.local/bin/pymolrfd4
 ```
 
-The bundled `show_termini.py` sits next to `.pymolrc` and loads automatically.
-Keep the repository's helper files together for RFD4 viewing. Its lightweight
-reader needs NumPy and Biopython in the Python environment used by PyMOL; an
-installed RFD4 environment is needed only for the native fallback. See
-[RFD4_QUICKSTART.md](RFD4_QUICKSTART.md) for dependencies and runtime overrides.
+These commands leave an existing destination intact. Save any existing startup file outside PyMOL’s `.pymolrc*` search pattern before installing. Add `~/.local/bin` to your shell’s `PATH` if needed. The links follow edits in the checkout. PyMOL searches the launch directory before the home directory.
 
-## Features
+A copied startup file also works with a checkout at `~/pymolrc`, or with `PYMOLRC_ROOT` set to the checkout path. Ordinary viewing needs PyMOL. The annotation reader uses NumPy and Biopython in PyMOL’s Python environment. Complex input schemas can use the native RFD4 environment. [RFD4 setup and usage](RFD4_QUICKSTART.md)
 
-- **Foliage color scheme**, applied per object on load: greens for protein, amethyst
-  ligands, soft element colors, black background.
-- **Metals as spheres**, detected by element, residue name, or atom name — including
-  metals buried inside a ligand residue. Showing sticks/lines also shows spheres
-  for selected metals, so a review PML's `hide everything` followed by `show sticks`
-  cannot leave isolated ions invisible. This applies to `show` and `as`, preserves
-  colors and sphere sizes, and respects explicit `hide`/`disable` commands.
-  `autostyle off` disables this automatic addition; `show_metals` still works.
-- **Catalytic residues** highlighted from `REMARK 666` (sidechain sticks; whole residue
-  for PRO/GLY).
-- **Fast batch browsing**: load a glob of designs and page through them with pgup/pgdn.
-  `autosolo` loads extras hidden for near-instant startup on large sets.
-- **Structural align-all**, background toggle, one-line sequence dump, and residue-gradient
-  coloring.
-- **Crystallography workup**: load a folder of refined crystals + their MTZ maps, split
-  every subunit, superpose all subunits (and a design model) onto each other, map
-  2Fo-Fc / Fo-Fc electron density that tracks the aligned atoms, print an RMSD summary,
-  and highlight `REMARK 666` catalytic residues — see [`crystallography/`](crystallography/).
+## Open and compare
 
-## Commands
+```sh
+pymol prediction.cif design.cif
+pymolrfd4 prediction.cif annotated.cif -d 'set grid_mode, 1'
+```
 
-**Not sure what's here?** Type `pymolrc_help` in PyMOL for an index of every command
-group, or `help_crystal` / `help_rfd3` for a specific kit's full argument reference.
+The second command places the two structures side by side. The prediction keeps its molecular palette. The annotated structure shows absolute coordinate targets in ochre with gold beads, internal groups in lilac, and reference backbone in blue. Sticks retain chemical element colors. Inside an ordinary session, `rfd4_load annotated.cif, motif` opens one annotated copy.
 
-| Command | Description |
+| In PyMOL | Action |
 |---|---|
-| `seq [sel-or-file]` | print the one-letter sequence of a selection/object, or a structure file path (`seq ~/x.pdb` loads it temporarily); prints usage on a bad input. Aliases: `sequence`, `get_seq`, `get_sequence` |
-| `show_metals [sel]` | show metals as spheres |
-| `show_catres [sel]` · `only_catres` | catalytic-residue sticks |
-| `style_all [sel]` | (re)apply the full style |
-| `color_palette [sel]` | apply the foliage look |
-| `bg_white` · `bg_black` | background toggle |
-| `align_all [ref]` · `center_all [ref]` | superpose / co-center all objects |
-| `autostyle` · `autoalign` · `autosolo` `on\|off` | load-time behavior toggles |
-| `publication_ray_trace` | ray-traced figure render |
-| `color_bb_rfdiffusion [sel]` | RFdiffusion gradient (dark blue → navaho), N→C |
-| `color_bb_rfdiffusion3 [sel]` | RFdiffusion3 gradient (pink → purple → teal → dark blue), N→C |
-| `color_bb_rfdiffusion4_proteina [sel]` | RFD4-Proteina Northern Nights gradient (teal → blue → violet → purple), N→C |
-| `gaussian_mode [sel]` · `gaussian_off [sel]` | GaussView / QM look (glossy ball-and-stick, bond orders, perspective), and restore |
-| `gaussian_spin` `on\|off` | gentle continuous spin (GUI) |
-| `rfd3_movie <traj.cif.gz>` | RFdiffusion3 diffusion movie from one trajectory: diffusing protein as CA spheres + V-cloud, fixed motif/cofactor auto-detected and styled via `style_fixed`; fully configurable — `color_scheme=` takes the default RFd3 gradient, a flat custom color, or a space-separated custom multi-color gradient; `ca_scale=`/`cloud_scale=`/`cloud_transparency=` size knobs; `bonds=`/`unbonds=` lists to force/remove bonds on load; any other keyword (`trim_atoms=`, `color_map=`, `lig_rep=`, ...) passes straight through to `style_fixed`; plus `reverse=1`, `fixed_sidechain=1`, JSON cross-check (`fixed_json=`/auto); auto-runs `rfd3_check_frames` and prints whether `reverse=` actually plays noise → folded for that file; then `mplay` |
-| `rfd3_check_frames <obj> [, reverse]` | which end of a loaded RFd3 trajectory is noise vs folded, measured from geometry (CA radius from centroid — noise is collapsed, folded is expanded), not assumed from the `_noisy_model_`/`_denoised_model_` filename (`rfd3_movie` doesn't treat the two differently); reports whether a given `reverse=` setting is correct for that file |
-| `style_fixed <obj>` | solid, opaque ball-and-stick on an `rfd3_movie` trajectory's fixed theozyme; fixes the "fixed atoms never look opaque" problem at its root (see `docs/RFD3_FIGURES.md`); configurable — `trim_atoms=` (dict of `{resn: atom_names}` to trim any fully-fixed residue beyond the built-in GLU/HIS, or `{}` to disable trimming), `color_map=` (per-residue/selection color overrides applied over `fixed_color`), `lig_rep=` (`'sticks'` default, or `'lines'`/etc); idempotent, safe to call again any time to restyle without reloading |
-| `apply_camera <obj> [, mode] [, sel] [, custom_view] [, span_states] [, turns]` | one entry point for camera control: `mode="orient"` (auto-frame), `"zoom"` (crop on `sel`), `"view"` (exact `get_view` matrix); `span_states=1` takes one fixed camera from the folded frame for a whole trajectory (RFd3 noise is a collapsed blob, not an expansion — see `docs/RFD3_FIGURES.md`) |
-| `draw_connectors <obj> [, color] [, max_dist]` | dashed lines from each fixed motif residue to its nearest scaffold Cα, on a folded frame — a visual stand-in for "this theozyme residue sits here" when there's no covalent bond to draw |
-| `catalytic_sel_from_motif <clean_obj>, <motif_sel> [, max_match]` | identify a clean (real-sequence) model's catalytic residues by coordinate-matching them to a trajectory's fixed motif — precise even where a ligand-distance cutoff would over-select |
-| `add_custom_bond <sel_a>, <sel_b> [, label]` | force a bond PyMOL won't perceive on its own (e.g. a covalent TS-adduct); writes topology once, holds across every state |
-| `remove_bond <sel_a>, <sel_b> [, label]` | remove a bond PyMOL perceived that you don't want — the mirror of `add_custom_bond` |
-| `xtal <path> [, design=]` | crystallography everything-button: load crystals + sibling MTZ maps, split subunits, superpose all subunits (and the design) onto a reference, style, highlight `REMARK 666` catalytic residues, and (with `focus=active`) zoom to the pocket — see [`crystallography/`](crystallography/) |
-| `xtal_density <sel> [, level] [, carve] [, diff] [, dlevel]` | 2Fo-Fc mesh (blue) + Fo-Fc difference (green +/red −) around a subunit/selection; density tracks the aligned atoms. Tighter: raise `level` / lower `carve`; larger: the reverse |
-| `xtal_rms` · `xtal_align` · `xtal_catres` · `xtal_focus` | RMSD table (every subunit vs reference and vs design); re-superpose; highlight catalytic residues; zoom pocket vs all. `help_crystal` for full args |
-| `pymolrc_help` · `help_crystal` · `help_rfd3` | print a command index / a kit's full argument reference at the `PyMOL>` prompt |
-| `rfd4_load <annotated.cif>, <object>` | show coordinate targets as sticks/spheres, reference atoms as lines, and annotated chain centroids; lightweight reader with native parser/cache fallback |
-| `rfd4_style <object>, <mode>` · `rfd4_info <object>` · `help_rfd4` | switch condition colors or inspect annotations; see [RFD4_QUICKSTART.md](RFD4_QUICKSTART.md) |
-| `rfd4_centroids <object>, 0` / `rfd4_centroids <object>, 1` | hide/show annotated centroid targets; the choice survives subsequent style calls |
-| `rfd4_cache_info` | show lightweight reads, disk/memory cache hits, native parses, and last reader timing |
+| `theme next`, `theme prev` | Preview the next or previous palette on open structures |
+| `theme foliage` | Restore foliage greens, amethyst ligands, and soft element colors |
+| `rfd4_style , coordinates, markers=all` | Show every coordinate-conditioned atom as a small sphere |
+| `rfd4_style , sequence` | Inspect fixed and free residue identities |
+| `rfd4_style , legacy` | Use the original cyan/orange atom view and reference lines |
+| `rfd4_autoload on` | Inspect annotations on subsequent files in this session |
+| `pymolrc_help` | List all command groups |
 
-The `color_bb_*` commands default to `chain A` and recolor carbons only (non-carbon atoms
-left alone); pass `all_atom=1` to recolor every atom, or `backbone_only=1` to keep
-sidechains as they are.
+## Commands and examples
 
-The RFD4-Proteina gradient uses the manuscript's **Northern Nights**
-`molecular_spectrum`: teal `#186C70` → blue `#3B5A8D` → violet `#463D73` →
-purple `#8D52AD`. These stops come from `paper/style/theme.json` at revision
-`f336faf492d3`, the manuscript revision cited by the
-[website stylesheet](https://github.com/RosettaCommons/RFD4-Proteina/blob/main/website/assets/site-colors.css),
-and match the [preprint's](https://rfd4-proteina.org/assets/paper/RFD4-Proteina.pdf)
-molecular palette. The website's interactive viewers use a flat teal instead.
-Colors are interpolated by residue number, as in `color_bb_rfdiffusion`.
-The individual colors are also available as `rfd4p_teal`, `rfd4p_blue`,
-`rfd4p_violet`, and `rfd4p_purple`.
+- Browse structure lists with `browse_list` and the page keys. Inspect sequences with `seq`, metal ions with `show_metals`, and PDB matcher residues with `show_catres`. [Command reference](docs/COMMANDS.md)
+- Choose molecular and brand colors or apply an RFdiffusion backbone gradient. [Color guide](docs/COLORS.md)
+- Inspect atom masks, centroid markers, and reader timings. [RFD4 inspection guide](RFD4_QUICKSTART.md)
+- Make trajectory movies and figures with the standalone RFD3 kit. [RFD3 quickstart](RFD3_QUICKSTART.md) · [Figure examples](docs/RFD3_FIGURES.md)
+- Superpose refined structures and view electron density with the crystallography kit. [Crystal commands and bundled example](crystallography/README.md)
 
-```pml
-color_bb_rfdiffusion4_proteina chain A
-color_bb_rfdiffusion4_proteina chain A, backbone_only=1
-color_bb_rfdiffusion4_proteina my_design, all_atom=1
-```
-
-## Brand colors
-
-Use any name below with PyMOL's `color` command. For an already-open session,
-add NVIDIA green immediately with `set_color nvidia_green, [118,185,0]`;
-restart PyMOL to load the complete palette from your installed `.pymolrc`.
-
-```pml
-color nvidia_green, polymer.protein and elem C
-color uw_purple, chain A
-color umich_maize, chain B
-color ipd_logo_blue, organic and elem C
-```
-
-**[NVIDIA](https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/NVIDIA-Trademark-and-Logo-Usage-Guidelines.pdf)**
-
-| Color name | HEX |
-|---|---|
-| `nvidia_green` | `#76B900` |
-| `nvidia_black` | `#000000` |
-| `nvidia_dark_gray` | `#1E1E1E` |
-| `nvidia_white` | `#FFFFFF` |
-
-Black is also specified in the [NVIDIA logo guidelines](https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/NVIDIA-Brand-Guidelines-for-NVIDIA-Partner-Network-v03-3-5-19.pdf).
-
-**[IPD](https://www.ipd.uw.edu/wp-content/uploads/2025/03/IPD-logo-UW-color-2025.png)**
-
-These values are sampled from solid fills in IPD’s current official logo,
-not a published color specification. Existing `ipd_blue` (`#4196B5`) and
-`ipd_purple` (`#B41F85`) remain available with their original values.
-
-| Color name | HEX |
-|---|---|
-| `ipd_logo_blue` | `#4D97B7` |
-| `ipd_logo_magenta` | `#B11186` |
-| `ipd_uw_purple` | `#4B2E83` |
-
-**[UW](https://www.washington.edu/brand/brand-elements/colors/)**
-
-Uses the published digital HEX values; some RGB labels on UW’s page differ.
-`uw_purple` / `uw_gold` are aliases for Husky Purple / Husky Gold.
-
-| Color name | HEX |
-|---|---|
-| `uw_purple` | `#32006E` |
-| `uw_husky_purple` | `#32006E` |
-| `uw_spirit_purple` | `#4B2E83` |
-| `uw_gold` | `#B7A57A` |
-| `uw_husky_gold` | `#B7A57A` |
-| `uw_web_gold` | `#E8E3D3` |
-| `uw_heritage_gold` | `#85754D` |
-| `uw_spirit_gold` | `#FFC700` |
-| `uw_accent_green` | `#AADB1E` |
-| `uw_accent_teal` | `#2AD2C9` |
-| `uw_accent_pink` | `#E93CAC` |
-| `uw_accent_lavender` | `#C5B4E3` |
-
-**[Michigan](https://brand.umich.edu/design-resources/colors/)**
-
-| Color name | HEX |
-|---|---|
-| `umich_maize` | `#FFCB05` |
-| `umich_blue` | `#00274C` |
-| `umich_tappan_red` | `#9A3324` |
-| `umich_ross_orange` | `#D86018` |
-| `umich_rackham_green` | `#75988D` |
-| `umich_wave_field_green` | `#A5A508` |
-| `umich_taubman_teal` | `#00B2A9` |
-| `umich_arboretum_blue` | `#2F65A7` |
-| `umich_a2_amethyst` | `#702082` |
-| `umich_matthaei_violet` | `#575294` |
-| `umich_peony_pink` | `#E01F7C` |
-| `umich_umma_tan` | `#CFC096` |
-| `umich_burton_tower_beige` | `#9B9A6D` |
-| `umich_angell_hall_ash` | `#989C97` |
-| `umich_law_quad_stone` | `#655A52` |
-| `umich_puma_black` | `#131516` |
-
-Sources checked September 10, 2026.
-
-## RFdiffusion3 trajectory figures
-
-**Just want the RFd3 movie/figure commands, not this whole foliage color
-scheme?** See **[`RFD3_QUICKSTART.md`](RFD3_QUICKSTART.md)** — a standalone
-page for sharing with labmates. It covers grabbing just
-[`rfd3_movie_kit.pml`](rfd3_movie_kit.pml) (one file, no other dependency) and
-either `run`-ing it from your own `.pymolrc` or copy-pasting it in directly,
-plus a command reference and a quickstart example.
-
-**Use the `_noisy_model_*.cif.gz` trajectory, not the `_denoised_model_*.cif.gz`
-one, if you have a choice.** `rfd3_movie` loads and renders either one the same
-way, and both are supported — but the noise/folded frame-order convention
-(which drives the `reverse=` default) has only been verified against noisy
-trajectories. `rfd3_check_frames` runs automatically on every `rfd3_movie` call
-and prints a warning if `reverse=` looks wrong for whatever file you loaded, so
-a denoised trajectory will still work correctly — just double check that
-printed warning if you use one.
-
-`docs/RFD3_FIGURES.md` collects the hard-won principles behind building
-Figure-1-style stills and storyboard movies from an RFd3 trajectory on top of
-the commands above — frame vs. state indexing, why disconnected motif
-fragments ignore transparency, why RFd3 noise is a collapsed blob (not an
-expanding cloud) and what that means for framing a camera, why you must never
-toggle representations per-frame on the live trajectory object, GIF/MP4
-assembly pitfalls, and more. Read it before re-debugging any of these.
-
-`examples/make_rfd3_figure.py` and `examples/make_rfd3_gif.py` are complete,
-runnable worked examples built on the bundled trajectory in `example_pdbs/`
-(`pymol -cq examples/make_rfd3_figure.py`). `scripts/frames_to_movie.py` is
-the pure-Python (no PyMOL) post-processing step they hand off to for
-GIF/MP4 assembly — usable standalone once you have rendered PNG frames.
-
-## Crystallography
-
-**Just want the crystal-structure commands?** See
-**[`crystallography/README.md`](crystallography/README.md)** — a standalone kit
-(one file, [`crystallography/crystal_kit.pml`](crystallography/crystal_kit.pml),
-no dependency on the rest of this repo) for loading refined crystals, splitting
-and superposing every subunit onto each other and onto a design model, mapping
-2Fo-Fc / Fo-Fc electron density onto the aligned atoms (tighter/larger with two
-knobs), printing an RMSD summary, and highlighting `REMARK 666` catalytic
-residues in magenta.
-
-`crystallography/example/` bundles a runnable demo — two real crystals of the
-same design (each with its refined `.mtz`) plus the design model. One command
-does the whole workup:
-
-```
-PyMOL> run ~/pymolrc/crystallography/crystal_kit.pml
-PyMOL> xtal ~/pymolrc/crystallography/example, design=~/pymolrc/crystallography/example/ZAPP_P1D1_design.pdb, focus=active
-PyMOL> xtal_rms
-PyMOL> xtal_density xtal_Pin5_A
-```
-
-(When this repo is cloned at `~/pymolrc`, the kit auto-loads at PyMOL startup —
-no `run` line needed; type `help_crystal` to confirm it's there.)
-
-## Examples
-
-`example_pdbs/` holds sample structures to try the commands on:
-- `ZETA_1__A1_metalloesterase_theozyme.pdb` — a metalloesterase theozyme (Zn + His triad + substrate); good for `gaussian_mode` and `color_bb_*`.
-- `ZAPP_p1D1_i14_rfd3_noisy_trajectory.cif.gz` — an RFdiffusion3 diffusion trajectory for `rfd3_movie` and the `examples/` scripts above.
-- `crystallography/example/` — two refined crystals (+ MTZ) and a design model for the `xtal` crystallography commands.
-
-## Reverting
-
-The original pre-fix config is kept locally (git-ignored) as
-`pymolrc_backup_2026-06-12.pymolrc`. Restore it with:
-
-```bash
-cp ~/pymolrc/pymolrc_backup_2026-06-12.pymolrc ~/.pymolrc
-```
+The startup file loads rendering defaults, palettes, browsing hooks, and display commands from [config/](config/). The RFD3 movie and crystallography kits also work independently. Sample structures are in [example_pdbs/](example_pdbs/) and [crystallography/example/](crystallography/example/).
